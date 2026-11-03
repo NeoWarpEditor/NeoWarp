@@ -1,3 +1,56 @@
+diff --git a/node_modules/scratch-gui/src/addons/addons/custom-zoom/style.css b/node_modules/scratch-gui/src/addons/addons/custom-zoom/style.css
+index c85fb2d..e96e8d9 100644
+--- a/node_modules/scratch-gui/src/addons/addons/custom-zoom/style.css
++++ b/node_modules/scratch-gui/src/addons/addons/custom-zoom/style.css
+@@ -12,3 +12,48 @@
+ .sa-custom-zoom-hidden > * {
+   transform: translateX(80px);
+ }
++
++/* NeoWarp: Glassmorphism effect for zoom controls */
++.blocklyZoom {
++  background: rgba(255, 255, 255, 0.15) !important;
++  backdrop-filter: blur(20px) !important;
++  -webkit-backdrop-filter: blur(20px) !important;
++  border-radius: 16px !important;
++  border: 1px solid rgba(255, 255, 255, 0.2) !important;
++  box-shadow: 
++    0 8px 32px rgba(0, 0, 0, 0.3),
++    0 0 0 1px rgba(255, 255, 255, 0.1) !important;
++  padding: 8px 4px !important;
++  margin-right: 8px !important;
++  margin-bottom: 8px !important;
++}
++
++/* Dark theme support */
++.sa-body-editor.dark .blocklyZoom {
++  background: rgba(0, 0, 0, 0.3) !important;
++  border: 1px solid rgba(255, 255, 255, 0.1) !important;
++}
++
++/* Zoom button hover effects */
++.blocklyZoom circle {
++  fill: rgba(255, 255, 255, 0.9) !important;
++  transition: all 0.2s ease !important;
++}
++
++.blocklyZoom circle:hover {
++  fill: white !important;
++  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
++}
++
++.sa-body-editor.dark .blocklyZoom circle {
++  fill: rgba(255, 255, 255, 0.8) !important;
++}
++
++.sa-body-editor.dark .blocklyZoom circle:hover {
++  fill: white !important;
++}
++
++/* Zoom icons */
++.blocklyZoom image {
++  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
++}
 diff --git a/node_modules/scratch-gui/src/addons/addons/find-bar/userstyle.css b/node_modules/scratch-gui/src/addons/addons/find-bar/userstyle.css
 index 7eb6bef..ba3c0fa 100644
 --- a/node_modules/scratch-gui/src/addons/addons/find-bar/userstyle.css
@@ -11,6 +64,2778 @@ index 7eb6bef..ba3c0fa 100644
    font-size: 0.75rem;
    padding-left: 0.4em;
  }
+diff --git a/node_modules/scratch-gui/src/addons/addons/fullscreen/userscript.js b/node_modules/scratch-gui/src/addons/addons/fullscreen/userscript.js
+index d5a11c2..029e8ca 100644
+--- a/node_modules/scratch-gui/src/addons/addons/fullscreen/userscript.js
++++ b/node_modules/scratch-gui/src/addons/addons/fullscreen/userscript.js
+@@ -14,6 +14,7 @@ export default async function ({ addon, console }) {
+   // In Electron, after running requestFullscreen() a resize event can be fired before
+   // document.fullscreenElement is updated. We want to ignore that event.
+   let isEnteringFullscreen = false;
++  let isExitingFullscreen = false;
+ 
+   // "Browser fullscreen" is defined as the mode that hides the browser UI.
+   function updateBrowserFullscreen() {
+@@ -30,8 +31,19 @@ export default async function ({ addon, console }) {
+             console.error(err);
+             isEnteringFullscreen = false;
+           });
+-      } else if (!addon.tab.redux.state.scratchGui.mode.isFullScreen && document.fullscreenElement !== null) {
+-        document.exitFullscreen();
++      } else if (!addon.tab.redux.state.scratchGui.mode.isFullScreen && document.fullscreenElement !== null && !isExitingFullscreen) {
++        isExitingFullscreen = true;
++        // NeoWarp: Use requestAnimationFrame to prevent stutter when exiting fullscreen
++        requestAnimationFrame(() => {
++          document.exitFullscreen()
++            .then(() => {
++              isExitingFullscreen = false;
++            })
++            .catch((err) => {
++              console.error(err);
++              isExitingFullscreen = false;
++            });
++        });
+       }
+     }
+   }
+@@ -115,26 +127,24 @@ export default async function ({ addon, console }) {
+     }
+   }
+ 
+-  // Properly resize the canvas and scale variable monitors on stage resize.
+-  let monitorScaler, resizeObserver, stage;
+   async function initScaler() {
+-    monitorScaler = await addon.tab.waitForElement("[class*=monitor-list_monitor-list-scaler]");
+-    stage = await addon.tab.waitForElement('[class*="stage-wrapper_full-screen"] [class*="stage_stage"] canvas');
+-    resizeObserver = new ResizeObserver(() => {
++    let monitorScaler;
++    try {
++      monitorScaler = await addon.tab.waitForElement("[class*=monitor-list_monitor-list-scaler]");
++    } catch (e) {
++      // Monitor scaler not found
++      return;
++    }
++    const updateScale = () => {
++      const stage = document.querySelector('[class*="stage-wrapper_full-screen"] [class*="stage_stage"]');
++      if (!stage) return;
+       const stageSize = stage.getBoundingClientRect();
+-      // When switching between project page and editor, the canvas
+-      // is removed from the DOM and inserted again in a different place.
+-      // This causes the size to be reported as 0x0.
+       if (!stageSize.width || !stageSize.height) return;
+-      // Width and height attributes of the canvas need to match the actual size.
+-      const renderer = addon.tab.traps.vm.runtime.renderer;
+-      if (renderer) renderer.resize(stageSize.width, stageSize.height);
+-      // Scratch uses the `transform` CSS property on a stage overlay element
+-      // to control the scaling of variable monitors.
+       const scale = stageSize.width / vm.runtime.stageWidth;
+       monitorScaler.style.transform = `scale(${scale}, ${scale})`;
+-    });
+-    resizeObserver.observe(stage);
++    };
++    updateScale();
++    window.addEventListener("resize", updateScale);
+   }
+ 
+   initScaler();
+@@ -180,11 +190,9 @@ export default async function ({ addon, console }) {
+     updatePhantomHeader();
+   });
+   addon.self.addEventListener("disabled", () => {
+-    resizeObserver.disconnect();
+     updatePhantomHeader();
+   });
+   addon.self.addEventListener("reenabled", () => {
+-    resizeObserver.observe(stage);
+     updateBrowserFullscreen();
+     updatePhantomHeader();
+   });
+diff --git a/node_modules/scratch-gui/src/components/blocks/blocks.css b/node_modules/scratch-gui/src/components/blocks/blocks.css
+index 583f587..9f661cb 100644
+--- a/node_modules/scratch-gui/src/components/blocks/blocks.css
++++ b/node_modules/scratch-gui/src/components/blocks/blocks.css
+@@ -97,3 +97,11 @@
+     min-width: auto;
+     min-height: auto;
+ }
++
++.blocks :global(.injectionDiv[data-custom-background="true"]) :global(.blocklySvg) {
++    background-color: transparent !important;
++}
++
++.blocks :global(.injectionDiv[data-custom-background="true"]) :global(.blocklyMainBackground) {
++    fill-opacity: 0;
++}
+diff --git a/node_modules/scratch-gui/src/components/custom-procedures/custom-procedures.css b/node_modules/scratch-gui/src/components/custom-procedures/custom-procedures.css
+index 9d0efec..8fa5756 100644
+--- a/node_modules/scratch-gui/src/components/custom-procedures/custom-procedures.css
++++ b/node_modules/scratch-gui/src/components/custom-procedures/custom-procedures.css
+@@ -67,7 +67,7 @@
+ }
+ 
+ .option-title {
+-    font-weight: bold;
++    font-weight: 700;
+ }
+ 
+ /* "Run without screen refresh" row */
+@@ -78,7 +78,7 @@
+ /* Confirmation buttons at the bottom of the modal */
+ .button-row {
+     margin-top: 1rem;
+-    font-weight: bolder;
++    font-weight: 700;
+     text-align: right;
+ }
+ 
+@@ -88,8 +88,9 @@
+     padding: 0.75rem 1rem;
+     background: white;
+     color: black;
+-    font-weight: bold;
++    font-weight: 700;
+     font-size: 0.85rem;
++    font-family: 'HarmonyOS Sans SC', "Helvetica Neue", Helvetica, Arial, sans-serif;
+ }
+ 
+ .button-row button.ok-button {
+diff --git a/node_modules/scratch-gui/src/components/forms/buffered-input-hoc.jsx b/node_modules/scratch-gui/src/components/forms/buffered-input-hoc.jsx
+index 246dfc0..42b4e1d 100644
+--- a/node_modules/scratch-gui/src/components/forms/buffered-input-hoc.jsx
++++ b/node_modules/scratch-gui/src/components/forms/buffered-input-hoc.jsx
+@@ -14,11 +14,18 @@ export default function (Input) {
+             bindAll(this, [
+                 'handleChange',
+                 'handleKeyPress',
+-                'handleFlush'
++                'handleFlush',
++                'handleScrubMouseDown',
++                'handleScrubMouseMove',
++                'handleScrubMouseUp'
+             ]);
+             this.state = {
+                 value: null
+             };
++            // Scrubbing state (drag left/right on number inputs to adjust value)
++            this._scrubbing = false;
++            this._scrubStartX = 0;
++            this._scrubStartValue = 0;
+         }
+         handleKeyPress (e) {
+             if (e.key === 'Enter') {
+@@ -37,15 +44,59 @@ export default function (Input) {
+         handleChange (e) {
+             this.setState({value: e.target.value});
+         }
++        // Begin scrub: record start position and value. Do not preventDefault yet
++        // so a plain click still focuses the input for typing.
++        handleScrubMouseDown (e) {
++            if (this.props.onMouseDown) this.props.onMouseDown(e);
++            if (this.props.type !== 'number' || this.props.disabled || e.button !== 0 || e.defaultPrevented) {
++                return;
++            }
++            this._scrubbing = false;
++            this._scrubStartX = e.clientX;
++            this._scrubStartValue = Number(this.props.value);
++            if (isNaN(this._scrubStartValue)) this._scrubStartValue = 0;
++            window.addEventListener('mousemove', this.handleScrubMouseMove);
++            window.addEventListener('mouseup', this.handleScrubMouseUp);
++        }
++        handleScrubMouseMove (e) {
++            const dx = e.clientX - this._scrubStartX;
++            // Only enter scrub mode after a small movement threshold so that a
++            // simple click still lets the user type into the field.
++            if (!this._scrubbing) {
++                if (Math.abs(dx) < 3) return;
++                this._scrubbing = true;
++            }
++            e.preventDefault();
++            // Hold Shift for finer (0.1x) adjustments.
++            const step = e.shiftKey ? 0.1 : 1;
++            const newValue = Math.round((this._scrubStartValue + dx * step) * 100) / 100;
++            this.setState({value: String(newValue)});
++            this.props.onSubmit(newValue);
++        }
++        handleScrubMouseUp (e) {
++            window.removeEventListener('mousemove', this.handleScrubMouseMove);
++            window.removeEventListener('mouseup', this.handleScrubMouseUp);
++            if (this._scrubbing) {
++                e.preventDefault();
++                this._scrubbing = false;
++                // Clear buffered value so the input reflects the committed prop.
++                this.setState({value: null});
++            }
++        }
+         render () {
++            const {
++                onMouseDown, // eslint-disable-line no-unused-vars
++                ...componentProps
++            } = this.props;
+             const bufferedValue = this.state.value === null ? this.props.value : this.state.value;
+             return (
+                 <Input
+-                    {...this.props}
++                    {...componentProps}
+                     value={bufferedValue}
+                     onBlur={this.handleFlush}
+                     onChange={this.handleChange}
+                     onKeyPress={this.handleKeyPress}
++                    onMouseDown={this.handleScrubMouseDown}
+                 />
+             );
+         }
+diff --git a/node_modules/scratch-gui/src/components/forms/input.css b/node_modules/scratch-gui/src/components/forms/input.css
+index 373c365..c0b3822 100644
+--- a/node_modules/scratch-gui/src/components/forms/input.css
++++ b/node_modules/scratch-gui/src/components/forms/input.css
+@@ -5,9 +5,9 @@
+     height: 2rem;
+     padding: 0 0.75rem;
+ 
+-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
++    font-family: 'HarmonyOS Sans SC', "Helvetica Neue", Helvetica, Arial, sans-serif;
+     font-size: 0.625rem;
+-    font-weight: bold;
++    font-weight: 400;
+     color: $text-primary;
+     background-color: $input-background;
+ 
+@@ -59,3 +59,12 @@
+ .input-form[type=number] {
+     -moz-appearance: textfield;
+ }
++
++/* Number inputs support click-and-drag scrubbing to adjust the value */
++.input-form[type=number] {
++    cursor: ew-resize;
++}
++
++.input-form[type=number]:focus {
++    cursor: text;
++}
+diff --git a/node_modules/scratch-gui/src/components/gui/gui.jsx b/node_modules/scratch-gui/src/components/gui/gui.jsx
+index 96acba1..2b3fe24 100644
+--- a/node_modules/scratch-gui/src/components/gui/gui.jsx
++++ b/node_modules/scratch-gui/src/components/gui/gui.jsx
+@@ -119,10 +119,23 @@ const GUIComponent = props => {
+         onClickAbout,
+         onClickAccountNav,
+         onCloseAccountNav,
++        onClickAI,
++        onClickTodoList,
++        onClickProjectAnalysis,
++        onClickMobilePreview,
++        onClickDetachStage,
++        onClickCollaborationHost,
++        onClickCollaborationJoin,
++        onClickCollaborationChat,
++        onClickEndCollaboration,
++        onClickLeaveCollaboration,
++        collaborationState,
+         onClickAddonSettings,
+         onClickDesktopSettings,
+         onClickNewWindow,
+         onClickPackager,
++        onClickEncryptedSave,
++        onViewsb3Save,
+         onLogOut,
+         onOpenRegistration,
+         onToggleLoginOpen,
+@@ -314,9 +327,22 @@ const GUIComponent = props => {
+                     onClickAbout={onClickAbout}
+                     onClickAccountNav={onClickAccountNav}
+                     onClickAddonSettings={onClickAddonSettings}
++                    onClickAI={onClickAI}
++                    onClickTodoList={onClickTodoList}
++                    onClickProjectAnalysis={onClickProjectAnalysis}
++                    onClickMobilePreview={onClickMobilePreview}
++                    onClickDetachStage={onClickDetachStage}
++                    onClickCollaborationHost={onClickCollaborationHost}
++                    onClickCollaborationJoin={onClickCollaborationJoin}
++                    onClickCollaborationChat={onClickCollaborationChat}
++                    onClickEndCollaboration={onClickEndCollaboration}
++                    onClickLeaveCollaboration={onClickLeaveCollaboration}
++                    collaborationState={collaborationState}
+                     onClickDesktopSettings={onClickDesktopSettings}
+                     onClickNewWindow={onClickNewWindow}
+                     onClickPackager={onClickPackager}
++                    onClickEncryptedSave={onClickEncryptedSave}
++                    onViewsb3Save={onViewsb3Save}
+                     onClickLogo={onClickLogo}
+                     onCloseAccountNav={onCloseAccountNav}
+                     onLogOut={onLogOut}
+@@ -507,6 +533,8 @@ GUIComponent.propTypes = {
+     onClickDesktopSettings: PropTypes.func,
+     onClickNewWindow: PropTypes.func,
+     onClickPackager: PropTypes.func,
++    onClickEncryptedSave: PropTypes.func,
++    onViewsb3Save: PropTypes.func,
+     onClickLogo: PropTypes.func,
+     onCloseAccountNav: PropTypes.func,
+     onExtensionButtonClick: PropTypes.func,
+diff --git a/node_modules/scratch-gui/src/components/library-item/library-item.css b/node_modules/scratch-gui/src/components/library-item/library-item.css
+index ffa11ed..4d059d5 100644
+--- a/node_modules/scratch-gui/src/components/library-item/library-item.css
++++ b/node_modules/scratch-gui/src/components/library-item/library-item.css
+@@ -12,13 +12,13 @@
+     max-width: 160px;
+     margin: $space;
+     padding: 1rem 1rem 0 1rem;
+-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
++    font-family: 'HarmonyOS Sans SC', "Helvetica Neue", Helvetica, Arial, sans-serif;
+     color: $text-primary;
+     background: $ui-white;
+     border-width: 2px;
+     border-style: solid;
+     border-color: $ui-black-transparent;
+-    border-radius: $space;
++    border-radius: 24px;
+     text-align: center;
+     cursor: pointer;
+ }
+@@ -27,6 +27,68 @@
+     align-self: stretch;
+ }
+ 
++/* NeoWarp: Extension library item styling - circular icon and centered content */
++.library-item-extension .library-item-image-container-wrapper {
++    display: flex;
++    align-items: center;
++    justify-content: center;
++    height: 100px;
++    width: 100%;
++}
++
++.library-item-extension .library-item-image-container {
++    position: relative;
++    height: 80px;
++    width: 80px;
++    display: flex;
++    align-items: center;
++    justify-content: center;
++}
++
++.library-item-extension .library-item-image {
++    max-width: 80px;
++    max-height: 80px;
++    width: 80px;
++    height: 80px;
++    border-radius: 50%;
++    object-fit: cover;
++    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
++}
++
++.library-item-extension .library-item-name {
++    width: 100%;
++    margin: 0.25rem 0 0.1rem 0;
++    text-align: center;
++    font-weight: 700;
++}
++
++.library-item-extension .featured-extension-text {
++    text-align: center !important;
++    padding-left: 0 !important;
++    padding-right: 0 !important;
++    width: 100%;
++    display: flex;
++    flex-direction: column;
++    align-items: center;
++}
++
++.library-item-extension .featured-description {
++    text-align: center;
++    width: 100%;
++    padding-left: 0.5rem;
++    padding-right: 0.5rem;
++}
++
++.library-item-extension .featured-extension-metadata {
++    justify-content: center;
++    text-align: center !important;
++}
++
++.library-item-extension .extension-links {
++    justify-content: center;
++    text-align: center !important;
++}
++
+ .library-item:hover {
+     border-width: 2px;
+     border-color: $looks-secondary;
+@@ -141,9 +203,9 @@
+ .featured-description {
+     display: block;
+     font-weight: normal;
+-    line-height: 1.375rem;
+-    padding-top: .3125rem;
+-    padding-bottom: .25rem;
++    line-height: 1.2rem;
++    padding-top: 0.1rem;
++    padding-bottom: 0.1rem;
+ }
+ 
+ .featured-extension-metadata {
+diff --git a/node_modules/scratch-gui/src/components/library-item/library-item.jsx b/node_modules/scratch-gui/src/components/library-item/library-item.jsx
+index faf55af..ba2b9b6 100644
+--- a/node_modules/scratch-gui/src/components/library-item/library-item.jsx
++++ b/node_modules/scratch-gui/src/components/library-item/library-item.jsx
+@@ -58,6 +58,7 @@ class LibraryItemComponent extends React.PureComponent {
+                     this.props.hidden ? styles.hidden : null
+                 )}
+                 onClick={this.props.onClick}
++                onContextMenu={this.props.onContextMenu}
+             >
+                 <div className={styles.featuredImageContainer}>
+                     {this.props.disabled ? (
+@@ -215,6 +216,7 @@ class LibraryItemComponent extends React.PureComponent {
+                 tabIndex="0"
+                 onBlur={this.props.onBlur}
+                 onClick={this.props.onClick}
++                onContextMenu={this.props.onContextMenu}
+                 onFocus={this.props.onFocus}
+                 onKeyPress={this.props.onKeyPress}
+                 onMouseEnter={this.props.showPlayButton ? null : this.props.onMouseEnter}
+@@ -285,6 +287,7 @@ LibraryItemComponent.propTypes = {
+     onFavorite: PropTypes.func,
+     onBlur: PropTypes.func.isRequired,
+     onClick: PropTypes.func.isRequired,
++    onContextMenu: PropTypes.func,
+     onFocus: PropTypes.func.isRequired,
+     onKeyPress: PropTypes.func.isRequired,
+     onMouseEnter: PropTypes.func.isRequired,
+diff --git a/node_modules/scratch-gui/src/components/library/library.jsx b/node_modules/scratch-gui/src/components/library/library.jsx
+index 685ccce..36cd157 100644
+--- a/node_modules/scratch-gui/src/components/library/library.jsx
++++ b/node_modules/scratch-gui/src/components/library/library.jsx
+@@ -45,6 +45,7 @@ class LibraryComponent extends React.Component {
+             'handleSelect',
+             'handleFavorite',
+             'handleTagClick',
++            'handleContextMenu',
+             'setFilteredDataRef'
+         ]);
+         const favorites = this.readFavoritesFromStorage();
+@@ -82,8 +83,23 @@ class LibraryComponent extends React.Component {
+         }
+     }
+     handleSelect (id) {
+-        this.handleClose();
+-        this.props.onItemSelected(this.getFilteredData()[id]);
++        const item = this.getFilteredData()[id];
++        // For items that should keep the library open (e.g. "add my extension" card),
++        // don't close the library so that subsequent modals can be rendered on top.
++        if (item && item !== '---' && item.keepOpenOnSelect) {
++            this.props.onItemSelected(item);
++        } else {
++            this.handleClose();
++            this.props.onItemSelected(item);
++        }
++    }
++    handleContextMenu (id, event) {
++        if (this.props.onItemContextMenu) {
++            const item = this.getFilteredData()[id];
++            if (item && item !== '---') {
++                this.props.onItemContextMenu(item, event);
++            }
++        }
+     }
+     readFavoritesFromStorage () {
+         let data;
+@@ -172,6 +188,9 @@ class LibraryComponent extends React.Component {
+         this.setState({filterQuery: ''});
+     }
+     getFilteredData () {
++        const pinnedSet = this.props.pinnedKeys && this.props.pinnedKeys.length ?
++            new Set(this.props.pinnedKeys) : null;
++
+         // When no filtering, favorites get their own section
+         if (this.state.selectedTag === 'all' && !this.state.filterQuery) {
+             const favoriteItems = this.props.data
+@@ -187,9 +206,22 @@ class LibraryComponent extends React.Component {
+                 favoriteItems.push('---');
+             }
+ 
++            let dataItems = this.props.data;
++            if (pinnedSet) {
++                const pinnedData = dataItems.filter(dataItem => (
++                    dataItem !== '---' && pinnedSet.has(dataItem[this.props.persistableKey])
++                ));
++                const unpinnedData = dataItems.filter(dataItem => (
++                    dataItem === '---' || !pinnedSet.has(dataItem[this.props.persistableKey])
++                ));
++                if (pinnedData.length) {
++                    dataItems = [...pinnedData, '---', ...unpinnedData];
++                }
++            }
++
+             return [
+                 ...favoriteItems,
+-                ...this.props.data
++                ...dataItems
+             ];
+         }
+ 
+@@ -215,6 +247,17 @@ class LibraryComponent extends React.Component {
+             ));
+         }
+ 
++        if (this.props.pinnedKeys && this.props.pinnedKeys.length) {
++            const pinnedSetInner = new Set(this.props.pinnedKeys);
++            const pinnedItems = filteredItems.filter(dataItem => (
++                dataItem !== '---' && pinnedSetInner.has(dataItem[this.props.persistableKey])
++            ));
++            const unpinnedItems = filteredItems.filter(dataItem => (
++                dataItem === '---' || !pinnedSetInner.has(dataItem[this.props.persistableKey])
++            ));
++            filteredItems = pinnedItems.concat(unpinnedItems);
++        }
++
+         if (this.state.filterQuery) {
+             filteredItems = filteredItems.filter(dataItem => {
+                 const search = [...dataItem.tags];
+@@ -299,6 +342,7 @@ class LibraryComponent extends React.Component {
+                     </div>
+                 )}
+                 <div
++                    key={this.state.selectedTag}
+                     className={classNames(styles.libraryScrollGrid, {
+                         [styles.withFilterBar]: this.props.filterable || this.props.tags
+                     })}
+@@ -324,6 +368,7 @@ class LibraryComponent extends React.Component {
+                                 incompatibleWithScratch={dataItem.incompatibleWithScratch}
+                                 favorite={this.state.favorites.includes(dataItem[this.props.persistableKey])}
+                                 onFavorite={this.handleFavorite}
++                                onContextMenu={this.props.onItemContextMenu ? this.handleContextMenu : null}
+                                 insetIconURL={dataItem.insetIconURL}
+                                 internetConnectionRequired={dataItem.internetConnectionRequired}
+                                 isPlaying={this.state.playingItem === index}
+@@ -388,10 +433,12 @@ LibraryComponent.propTypes = {
+     id: PropTypes.string.isRequired,
+     persistableKey: PropTypes.string,
+     intl: intlShape.isRequired,
++    onItemContextMenu: PropTypes.func,
+     onItemMouseEnter: PropTypes.func,
+     onItemMouseLeave: PropTypes.func,
+     onItemSelected: PropTypes.func,
+     onRequestClose: PropTypes.func,
++    pinnedKeys: PropTypes.arrayOf(PropTypes.string),
+     setStopHandler: PropTypes.func,
+     showPlayButton: PropTypes.bool,
+     tags: PropTypes.arrayOf(PropTypes.shape(TagButton.propTypes)),
+diff --git a/node_modules/scratch-gui/src/components/loader/loader.css b/node_modules/scratch-gui/src/components/loader/loader.css
+index aa18cde..f7d14fa 100644
+--- a/node_modules/scratch-gui/src/components/loader/loader.css
++++ b/node_modules/scratch-gui/src/components/loader/loader.css
+@@ -2,6 +2,8 @@
+ @import "../../css/z-index.css";
+ @import "../../css/default-colors.css";
+ 
++/* NeoWarp 自定义加载页样式：居中毛玻璃卡片 + 左右均分（粒子 Logo / 文案+进度条） */
++
+ .background {
+     position: absolute;
+     top: 0;
+@@ -12,10 +14,13 @@
+     display: flex;
+     justify-content: center;
+     align-items: center;
+-    background-color: $menu-bar-background;
+-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+-    text-align: center;
+-    color: white;
++    /* 半透明遮罩 + 毛玻璃，不填满纯色；文字颜色跟随主题（深下白/浅下黑） */
++    background-color: rgba(0, 0, 0, 0.28);
++    backdrop-filter: blur(14px);
++    -webkit-backdrop-filter: blur(14px);
++    font-family: "HarmonyOS Sans SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
++    text-align: left;
++    color: var(--text-primary);
+ }
+ 
+ .fullscreen {
+@@ -25,168 +30,142 @@
+     z-index: $z-index-stage-wrapper-overlay;
+ }
+ 
+-.block-animation {
+-    width: 125px;
+-    height: 150px;
+-    margin: 50px auto 0px;
+-}
+-
+-.block-animation img {
+-    display: block;
+-    position: relative;
+-    height: 30%;
+-    margin-top: -4px;
+-}
+-
+-.top-block {
+-    animation: top-slide-in 1.5s ease infinite;
+-}
+-
+-.middle-block {
+-    animation: middle-slide-in 1.5s ease infinite;
+-}
+-
+-.bottom-block {
+-    animation: bottom-slide-in 1.5s ease infinite;
+-}
+-
+-[dir="rtl"] .top-block {
+-    animation: top-slide-in-rtl 1.5s ease infinite;
+-}
+-
+-[dir="rtl"] .middle-block {
+-    animation: middle-slide-in-rtl 1.5s ease infinite;
+-}
+-
+-[dir="rtl"] .bottom-block {
+-    animation: bottom-slide-in-rtl 1.5s ease infinite;
+-}
+-
+-@keyframes top-slide-in {
+-  0% {
+-    transform: translateY(50px);
+-    opacity: 0;
+-  }
+-
+-  33% {
+-    transform: translateY(0px);
+-    opacity: 1;
+-  }
+-}
+-
+-@keyframes middle-slide-in {
+-  0% {
+-    transform: translateY(50px);
+-    opacity: 0;
+-  }
+-
+-  33% {
+-    transform: translateY(50px);
+-    opacity: 0;
+-  }
+-
+-  66% {
+-    transform: translateY(0px);
+-    opacity: 1;
+-  }
+-}
+-
+-@keyframes bottom-slide-in {
+-  0% {
+-    transform: translateY(50px);
+-    opacity: 0;
+-  }
+-
+-  66% {
+-    transform: translateY(50px);
+-    opacity: 0;
+-  }
+-
+-  100% {
+-    transform: translateY(0px);
+-    opacity: 1;
+-  }
++/* 居中卡片：不填充整个屏幕；纵向布局（上：左右两栏，下：整宽进度条） */
++.card {
++    display: flex;
++    flex-direction: column;
++    align-items: stretch;
++    gap: 1.5rem;
++    padding: 2.75rem 3.25rem;
++    border-radius: 24px;
++    /* 浅色主题：白色半透明卡片；深色主题（默认变量）：深色半透明卡片 */
++    background: color-mix(in srgb, var(--ui-modal-background) 78%, transparent);
++    border: 0.5px solid var(--ui-black-transparent);
++    color: var(--text-primary);
++    box-shadow:
++        0 24px 70px rgba(0, 0, 0, 0.25),
++        0 0 0 0.5px var(--ui-black-transparent);
++    backdrop-filter: blur(28px) saturate(160%);
++    -webkit-backdrop-filter: blur(28px) saturate(160%);
++    max-width: 640px;
++    animation: cardIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
++}
++
++/* 上排：左右两栏（粒子 Logo / 文案） */
++.mainRow {
++    display: flex;
++    flex-direction: row;
++    align-items: center;
++    gap: 2.5rem;
+ }
+ 
+-@keyframes top-slide-in-rtl {
+-  0% {
+-    transform: translateY(50px) scaleX(-1);
+-    opacity: 0;
+-  }
+-
+-  33% {
+-    transform: translateY(0px) scaleX(-1);
+-    opacity: 1;
+-  }
+-  100% {
+-    transform: translateY(0px) scaleX(-1);
+-    opacity: 1;
+-  }
++@keyframes cardIn {
++    from {
++        opacity: 0;
++        transform: translateY(14px) scale(0.97);
++    }
++    to {
++        opacity: 1;
++        transform: translateY(0) scale(1);
++    }
+ }
+ 
+-@keyframes middle-slide-in-rtl {
+-  0% {
+-    transform: translateY(50px) scaleX(-1);
+-    opacity: 0;
+-  }
+-
+-  33% {
+-    transform: translateY(50px) scaleX(-1);
+-    opacity: 0;
+-  }
+-
+-  66% {
+-    transform: translateY(0px) scaleX(-1);
+-    opacity: 1;
+-  }
+-  100% {
+-    transform: translateY(0px) scaleX(-1);
+-    opacity: 1;
+-  }
++.left {
++    flex: 0 0 auto;
++    display: flex;
++    align-items: flex-start;
++    justify-content: center;
+ }
+ 
+-@keyframes bottom-slide-in-rtl {
+-  0% {
+-    transform: translateY(50px) scaleX(-1);
+-    opacity: 0;
+-  }
+-
+-  66% {
+-    transform: translateY(50px) scaleX(-1);
+-    opacity: 0;
+-  }
+-
+-  100% {
+-    transform: translateY(0px) scaleX(-1);
+-    opacity: 1;
+-  }
++.particleCanvas {
++    display: block;
++    width: 260px;
++    height: 260px;
+ }
+ 
+-.title {
+-    font-size: 2rem;
+-    font-weight: bold;
+-    margin: 0.75rem 0;
++.right {
++    flex: 1 1 auto;
++    min-width: 0;
++    display: flex;
++    flex-direction: column;
++    justify-content: center;
++    padding-top: 0.25rem;
++    color: var(--text-primary);
++}
++
++.brand {
++    font-family: "HarmonyOS Sans SC", "Helvetica Neue", Helvetica, Arial, sans-serif;
++    font-weight: 700;
++    font-size: 2.4rem;
++    letter-spacing: -0.5px;
++    line-height: 1.1;
++    color: var(--text-primary);
++    margin-bottom: 0.4rem;
++}
++
++/* 正在加载的项目名：较长时省略号截断 */
++.projectName {
++    font-size: 1.05rem;
++    font-weight: 600;
++    color: var(--text-primary);
++    opacity: 0.85;
++    letter-spacing: -0.1px;
++    max-width: 260px;
++    overflow: hidden;
++    text-overflow: ellipsis;
++    white-space: nowrap;
++    margin-bottom: 0.55rem;
+ }
+ 
+ .message {
+-    height: 20px;
+-    margin: 5px 0;
++    font-size: 0.95rem;
++    font-weight: 500;
++    color: var(--text-primary);
++    opacity: 0.72;
++    letter-spacing: 0.2px;
++    min-height: 22px;
++    font-variant-numeric: tabular-nums;
+ }
+ 
+-.bar-outer {
+-    width: 250px;
+-    height: 8px;
+-    border-radius: 8px;
+-    background-color: $ui-white-transparent-default;
++/* 进度条：变长，横跨整个卡片底部宽度并居中 */
++.barOuter {
++    width: 100%;
++    height: 6px;
++    border-radius: 999px;
++    background-color: var(--ui-black-transparent);
+     overflow: hidden;
+     position: relative;
+-    margin: auto;
+ }
+-.bar-inner {
++
++.barInner {
+     position: absolute;
+     top: 0;
+     left: 0;
+     width: 0;
+     height: 100%;
+-    background-color: $ui-white-default;
++    border-radius: 999px;
++    /* 进度条颜色跟随文字色（currentColor 继承自 .right 的 var(--text-primary)）：
++       深色主题下为白色，浅色主题下为黑色 */
++    background-color: currentColor;
++    transition: width 0.25s ease;
++}
++
++/* 预计剩余时间：圆角矩形居中显示在进度条下方 */
++.eta {
++    align-self: center;
++    padding: 0.28rem 0.8rem;
++    border-radius: 999px;
++    background: var(--ui-black-transparent);
++    color: var(--text-primary);
++    font-size: 0.78rem;
++    font-weight: 500;
++    letter-spacing: 0.2px;
++    min-height: 1.1rem;
++    font-variant-numeric: tabular-nums;
++    transition: opacity 0.2s ease;
++}
++.eta:empty {
++    opacity: 0;
++    padding: 0;
++    min-height: 0;
+ }
+diff --git a/node_modules/scratch-gui/src/components/loader/loader.jsx b/node_modules/scratch-gui/src/components/loader/loader.jsx
+index 3b1fad6..af03e47 100644
+--- a/node_modules/scratch-gui/src/components/loader/loader.jsx
++++ b/node_modules/scratch-gui/src/components/loader/loader.jsx
+@@ -6,9 +6,7 @@ import PropTypes from 'prop-types';
+ import bindAll from 'lodash.bindall';
+ import styles from './loader.css';
+ import {getIsLoadingWithId} from '../../reducers/project-state';
+-import topBlock from './top-block.svg';
+-import middleBlock from './middle-block.svg';
+-import bottomBlock from './bottom-block.svg';
++import logoUrl from './logo.png';
+ 
+ const mainMessages = {
+     'gui.loader.headline': (
+@@ -48,18 +46,62 @@ const messages = defineMessages({
+ // Because progress events are fired so often during the very performance-critical loading
+ // process and React updates are very slow, we bypass React for updating the progress bar.
+ 
++/*
++ * NeoWarp 粒子 Logo 加载页：
++ * 用 Canvas 2D（非 WebGL）将 Logo 像素采样为粒子目标点，
++ * 粒子从随机位置缓动汇聚成 Logo 形状，带呼吸浮动与中心光晕。
++ * 采样步长与总数经控制（<= ~2600）以保证流畅。
++ */
++const PARTICLE_SIZE = 220;
++
++/*
++ * 剩余时间（ETA）估算参数。
++ * 进度按“资产个数”统计，而单个资产的耗时差异极大（小图片毫秒级、大声音几秒），
++ * 用“全程平均速率”倒推剩余时间会被加载前期大量的小资产/缓存命中推虚高，
++ * 造成“开头报得很快、后面越算越慢”的现象。这里综合三种信号取保守值：
++ * 1) 最近 4 秒滑动窗口内的完成节奏（近期速率）；
++ * 2) 最近 3 个资产完成间隔的中位数（近期单资产耗时，免疫个别异常值）；
++ * 3) 当前资产已经等待的时长（卡在某个大资产上时随时间持续抬升）。
++ * 全程平均速率只在前三者都不可用时兜底；显示值再经指数平滑。
++ * 显示层还做限幅：估算可以随时向下修正，但向上只允许极慢爬升（卡住时每秒 +0.3 秒量级），
++ * 保证数字不会“一会儿大、一会儿小”地跳动。
++ */
++const ETA_WINDOW_MS = 4000; // 速率滑动窗口：只统计最近 4 秒内完成的资产
++const ETA_MIN_SPAN_MS = 400; // 窗口跨度小于该值说明是“瞬间完成一批”，近期速率不可靠
++const ETA_MAX_DURATION_SAMPLES = 3; // 参与中位数计算的最近完成间隔个数
++const ETA_CONSERVATIVE_FACTOR = 1.25; // 完成样本很少时的保守系数
++const ETA_GROWING_TOTAL_FACTOR = 1.15; // 总资产数仍在增长（请求尚未发完）时的保守系数
++const ETA_SMOOTH_TAU_MS = 1200; // 内部估计的时间常数：平滑按“真实时间”衰减，同毫秒内的事件脉冲不会逐个抖动
++const ETA_FALL_PER_SEC = 1.6; // 显示值“下落限速”（秒/秒）：估算变低时按此速度平滑逼近，不当场跳水
++const ETA_FALL_GAP_GAIN = 0.08; // 估算与显示的缺口越大，下落限速按比例放宽（缺口 20 秒时约 3.2 秒/秒）
++const ETA_CLIMB_UP_LIMIT = 0.3; // 显示数值“上爬限速”（秒/秒）：只有卡住等大资产时才缓慢上调
++const ETA_MIN_SAMPLES = 2; // 至少完成这么多资产才开始估算（单样本时需等待 1 秒以上）
++const ETA_MIN_ELAPSED_MS = 500; // 资产阶段至少进行这么久才开始估算
++const ETA_MAX_INTERVAL_MS = 300000; // 单个资产完成间隔的估算上限，避免极端卡顿刷出离谱的数字
++
++
+ class LoaderComponent extends React.Component {
+     constructor (props) {
+         super(props);
+         bindAll(this, [
+             'handleAssetProgress',
+             'handleProjectLoaded',
++            'etaIdleRecheck',
+             'barInnerRef',
+-            'messageRef'
++            'messageRef',
++            'etaRef',
++            'canvasRef'
+         ]);
+         this.barInnerEl = null;
+         this.messageEl = null;
++        this.etaEl = null;
++        this.canvasEl = null;
+         this.ignoreProgress = false;
++        this.particles = [];
++        this.rafId = null;
++        this.startTime = 0;
++        // 剩余时间估算状态
++        this.resetEta();
+     }
+     componentDidMount () {
+         this.handleAssetProgress(
+@@ -68,35 +110,344 @@ class LoaderComponent extends React.Component {
+         );
+         this.props.vm.on('ASSET_PROGRESS', this.handleAssetProgress);
+         this.props.vm.runtime.on('PROJECT_LOADED', this.handleProjectLoaded);
++        this.initParticles();
++        // 空闲心跳：卡在某个大资产上（长时间没有完成事件）时，
++        // 剩余时间估算仍然随流逝时间逐步修正，而不是停在旧数字上
++        this.etaRecheckId = setInterval(this.etaIdleRecheck, 1000);
+     }
+     componentWillUnmount () {
+         this.props.vm.off('ASSET_PROGRESS', this.handleAssetProgress);
+         this.props.vm.runtime.off('PROJECT_LOADED', this.handleProjectLoaded);
++        if (this.rafId) cancelAnimationFrame(this.rafId);
++        if (this.etaRecheckId) {
++            clearInterval(this.etaRecheckId);
++            this.etaRecheckId = null;
++        }
++    }
++    initParticles () {
++        const canvas = this.canvasEl;
++        if (!canvas) return;
++        const img = new Image();
++        img.src = logoUrl;
++        img.onload = () => {
++            const off = document.createElement('canvas');
++            off.width = PARTICLE_SIZE;
++            off.height = PARTICLE_SIZE;
++            const octx = off.getContext('2d');
++            octx.drawImage(img, 0, 0, PARTICLE_SIZE, PARTICLE_SIZE);
++            let imageData;
++            try {
++                imageData = octx.getImageData(0, 0, PARTICLE_SIZE, PARTICLE_SIZE).data;
++            } catch (e) {
++                return;
++            }
++            const gap = 3;
++            const pts = [];
++            for (let y = 0; y < PARTICLE_SIZE; y += gap) {
++                for (let x = 0; x < PARTICLE_SIZE; x += gap) {
++                    const i = (y * PARTICLE_SIZE + x) * 4;
++                    const r = imageData[i];
++                    const g = imageData[i + 1];
++                    const b = imageData[i + 2];
++                    const a = imageData[i + 3];
++                    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
++                    if (a > 100 && lum > 40) {
++                        pts.push({x, y, r, g, b});
++                    }
++                }
++            }
++            const MAX = 2600;
++            let chosen = pts;
++            if (pts.length > MAX) {
++                chosen = [];
++                for (let i = 0; i < MAX; i++) {
++                    chosen.push(pts[Math.floor(Math.random() * pts.length)]);
++                }
++            }
++            const size = canvas.width;
++            const scale = size / PARTICLE_SIZE;
++            this.particles = chosen.map(p => ({
++                tx: p.x * scale,
++                ty: p.y * scale,
++                x: Math.random() * size,
++                y: Math.random() * size,
++                phase: Math.random() * Math.PI * 2,
++                speed: 0.6 + Math.random() * 0.8,
++                amp: 1.5 + Math.random() * 2.5,
++                r: p.r,
++                g: p.g,
++                b: p.b,
++                s: 1 + ((p.r + p.g + p.b) / 765) * 2.2,
++                prog: 0,
++                delay: Math.random() * 0.4
++            }));
++            this.startTime = performance.now();
++            this.animate();
++        };
++    }
++    animate () {
++        const canvas = this.canvasEl;
++        if (!canvas) return;
++        const ctx = canvas.getContext('2d');
++        const size = canvas.width;
++
++        const frame = now => {
++            const elapsed = (now - this.startTime) / 1000;
++            ctx.clearRect(0, 0, size, size);
++            const cx = size / 2;
++            const cy = size / 2;
++            const glowR = size * 0.42;
++            const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
++            grad.addColorStop(0, 'rgba(90, 140, 255, 0.10)');
++            grad.addColorStop(1, 'rgba(90, 140, 255, 0)');
++            ctx.fillStyle = grad;
++            ctx.fillRect(0, 0, size, size);
++
++            for (const p of this.particles) {
++                if (p.prog < 1) {
++                    const local = Math.max(0, (elapsed - p.delay) / 1.4);
++                    p.prog = Math.min(1, local);
++                }
++                const e = 1 - Math.pow(1 - p.prog, 3);
++                const wob = Math.sin(elapsed * p.speed + p.phase) * p.amp * (1 - e * 0.6);
++                const targetX = p.tx + Math.cos(p.phase) * wob;
++                const targetY = p.ty + Math.sin(p.phase * 1.3) * wob;
++                p.x += (targetX - p.x) * (0.06 + e * 0.1);
++                p.y += (targetY - p.y) * (0.06 + e * 0.1);
++
++                const alpha = 0.35 + e * 0.65;
++                ctx.beginPath();
++                ctx.arc(p.x, p.y, p.s * (0.7 + e * 0.3), 0, Math.PI * 2);
++                ctx.fillStyle = `rgba(${p.r},${p.g},${p.b},${alpha})`;
++                ctx.fill();
++            }
++            this.rafId = requestAnimationFrame(frame);
++        };
++        this.rafId = requestAnimationFrame(frame);
++    }
++    // 清空剩余时间估算的全部状态
++    resetEta () {
++        this.loadStartTime = 0; // 本次资产加载阶段的计时起点
++        this.etaSamples = []; // 最近窗口内每个资产完成（finished++）的时刻
++        this.lastCompletionTime = 0; // 最近一次资产完成的时刻（0 表示尚无）
++        this.recentDurationsMs = []; // 最近几个“资产完成间隔”（毫秒），用于中位数
++        this.lastCtxFinished = 0; // 最近一次进度事件里的 finished
++        this.lastCtxTotal = 0; // 最近一次进度事件里的 total
++        this.lastTotalGrewTime = 0; // 最近一次 total 增长的时刻（说明请求还没发完）
++        this.smoothedEtaSec = null; // 平滑后的剩余秒数（按真实时间衰减的内部估计）
++        this.lastEtaEvalTime = 0; // 上次内部估计平滑的时刻（用于按真实时间计算平滑强度）
++        this.etaDisplayValue = null; // 真正展示出去的估算值（浮点秒；上爬/下落都限速）
++        this.etaTextEditSec = null; // 屏幕上实际显示的整数秒（每次最多 ±1 格，防数字跳格）
++        this.etaLastClimbTime = 0; // 上次做显示层限幅评估的时刻（用于按真实时长累积爬升额度）
++        this.lastEtaText = '';
++    }
++    // 空闲心跳：进度事件只在“请求增减/资产完成”时触发，若加载正卡在一个大资产上，
++    // 显示会长时间静止。这里每秒用最近的进度状态重估一次，让“等待时长”参与速率估计。
++    etaIdleRecheck () {
++        if (this.ignoreProgress || !this.etaEl || this.lastCtxTotal <= 0 || this.lastCtxFinished <= 0) {
++            return;
++        }
++        this.updateEta(this.lastCtxFinished, this.lastCtxTotal);
+     }
+     handleAssetProgress (finished, total) {
+         if (this.ignoreProgress || !this.barInnerEl || !this.messageEl) {
+             return;
+         }
+-
+         if (total === 0) {
+             // Started loading a new project.
+             this.barInnerEl.style.width = '0';
+             this.messageEl.textContent = this.props.intl.formatMessage(messages.projectData);
++            this.resetEta();
++            if (this.etaEl) this.etaEl.textContent = '';
+         } else {
++            // 计时从“第一个资产请求开始”算起，而不是从“第一个资产完成”算起，
++            // 否则第一批请求（下载/解压）的等待时间会被漏掉，导致前期估算偏快。
++            if (!this.loadStartTime) this.loadStartTime = performance.now();
+             this.barInnerEl.style.width = `${finished / total * 100}%`;
+             const message = this.props.isRemote ? messages.downloadingAssets : messages.loadingAssets;
+             this.messageEl.textContent = this.props.intl.formatMessage(message, {
+                 complete: finished,
+                 total
+             });
++            this.updateEta(finished, total);
++        }
++    }
++    updateEta (finished, total) {
++        if (!this.etaEl) return;
++        if (total <= 0) {
++            // 新加载阶段开始（runtime.resetProgress 发出的 (0, 0) 事件）：清空全部估算状态
++            this.resetEta();
++            this.etaEl.textContent = '';
++            return;
++        }
++        if (finished >= total) {
++            // 已请求的资产全部完成：只清显示、保留速率样本——
++            // 若随后还有新请求（逐个请求/完成的加载方式），估算可以无缝继续；
++            // 若加载就此结束，PROJECT_LOADED 的 resetProgress 会发出 (0, 0) 事件做全量重置。
++            this.etaEl.textContent = '';
++            return;
++        }
++        if (finished <= 0) {
++            // 请求阶段（还没有任何资产完成）：没有速率信息，只清掉可能存在的旧显示。
++            // 注意不要重置 loadStartTime——开局的一串请求事件会反复进入本分支，
++            // 计时起点应是本阶段第一个请求事件，而不是最后一个请求事件或首个完成事件。
++            if (this.lastCtxFinished > 0) {
++                // 进度曾推进过又回到 0（通常说明进入新加载阶段且 (0, 0) 事件被错过）：全量重置
++                this.resetEta();
++            } else if (total > this.lastCtxTotal) {
++                this.lastTotalGrewTime = performance.now();
++            }
++            this.lastCtxTotal = total;
++            this.etaEl.textContent = '';
++            return;
++        }
++        if (finished < this.lastCtxFinished) {
++            // 进度倒退：进入了新的加载阶段（兜底），全部重来
++            this.resetEta();
++            this.etaEl.textContent = '';
++            return;
++        }
++        const now = performance.now();
++        const isCompletion = finished > this.lastCtxFinished; // 资产完成事件（而非新增请求）
++        if (total > this.lastCtxTotal) this.lastTotalGrewTime = now;
++        this.lastCtxFinished = finished;
++        this.lastCtxTotal = total;
++        if (!this.loadStartTime) this.loadStartTime = now;
++
++        // 无论事件来源都先淘汰速率窗口里的过期样本（空闲心跳同样需要）
++        while (this.etaSamples.length && now - this.etaSamples[0] > ETA_WINDOW_MS) {
++            this.etaSamples.shift();
++        }
++
++        // 只有“资产完成”事件才计入速率与耗时样本；新增请求事件只影响剩余个数
++        if (isCompletion) {
++            // 记录该资产的实际耗时（与上一次完成的间隔），
++            // 近期中位数将作为速率下限，防止短暂高峰之后的回落被低估
++            if (this.lastCompletionTime && now > this.lastCompletionTime) {
++                this.recentDurationsMs.push(Math.min(now - this.lastCompletionTime, ETA_MAX_INTERVAL_MS));
++                if (this.recentDurationsMs.length > ETA_MAX_DURATION_SAMPLES) {
++                    this.recentDurationsMs.shift();
++                }
++            }
++            this.lastCompletionTime = now;
++            this.etaSamples.push(now);
++        } else if (!this.lastCompletionTime) {
++            // 没有任何可用锚点（空闲心跳且从未有资产完成），等待时长无从谈起
++            return;
++        }
++
++        const samples = this.etaSamples;
++        // 等待时长锚点：最近一次资产完成的时刻（尚无完成时退回加载起点）
++        const waitAnchor = this.lastCompletionTime || this.loadStartTime;
++        // 最近一个资产完成至今的等待时长：太久没有新资产完成，
++        // 说明单个资产的耗时至少是等待时长，可以参与速率估计
++        const waitSec = (now - waitAnchor) / 1000;
++        // 完成样本太少且等待还不长时信息太少，维持之前的显示
++        const idleEstimate = samples.length < ETA_MIN_SAMPLES && waitSec < 1;
++        if (idleEstimate || now - this.loadStartTime < ETA_MIN_ELAPSED_MS) {
++            return;
++        }
++
++        // 近期速率：最近一批完成事件摊到窗口跨度上的速度
++        const spanMs = samples.length >= 2 ? samples[samples.length - 1] - samples[0] : 0;
++        const recentRate = spanMs >= ETA_MIN_SPAN_MS ?
++            (samples.length - 1) / (spanMs / 1000) :
++            0;
++        // 等待速率：当前资产已经卡了 waitSec 秒还没完成，
++        // 说明剩余资产的速率不会快于“1 个 / 等待时长”，专门负责反映减速
++        const waitingRate = waitSec >= 1 ? 1 / waitSec : 0;
++        // 耗时下限速率：最近几个资产完成间隔的中位数——
++        // 如果最近的资产普遍很慢，速率不可能凭一个新完成事件就凭空变快，
++        // 这样能避免“大资产完成瞬间 ETA 崩塌、再慢慢爬回”的锯齿
++        let durationRate = 0;
++        if (this.recentDurationsMs.length) {
++            const sorted = this.recentDurationsMs.slice().sort((a, b) => a - b);
++            const medianMs = sorted[Math.floor((sorted.length - 1) / 2)];
++            durationRate = 1 / (medianMs / 1000);
++        }
++        // 全程平均速率：仅在前面的信号都不可用时兜底（方向偏保守）
++        const elapsedSec = (now - this.loadStartTime) / 1000;
++        const averageRate = elapsedSec > 0 ? finished / elapsedSec : 0;
++        let rate = Math.min(
++            ...[recentRate, waitingRate, durationRate].filter(r => r > 0),
++            Infinity
++        );
++        if (!isFinite(rate) || rate <= 0) {
++            rate = averageRate;
++        }
++        if (rate <= 0) return;
++
++        let remainSec = (total - finished) / rate;
++        // 剩下的资产往往偏大偏慢，刚开始样本不足时速率更不可信，稍微抬高一档
++        if (finished < 4) remainSec *= ETA_CONSERVATIVE_FACTOR;
++        // total 最近还在增长，说明真实工作量比当前 total 大（接近尾声时无必要，避免误抬尾段）
++        if (now - this.lastTotalGrewTime < 2000 && remainSec > 5) {
++            remainSec *= ETA_GROWING_TOTAL_FACTOR;
++        }
++
++        // 内部估计按真实时间做指数平滑：同毫秒内挤进来的事件簇这次评测 dt≈0，
++        // 几乎不改变估计值，估算只在真实时间流逝时渐进收敛，事件密集也不会逐个抖动
++        const dtEval = Math.max(0, Math.min((now - this.lastEtaEvalTime) / 1000, 5));
++        this.lastEtaEvalTime = now;
++        const smoothing = Math.min(1, dtEval / (ETA_SMOOTH_TAU_MS / 1000));
++        const smoothed = this.smoothedEtaSec === null ?
++            remainSec :
++            this.smoothedEtaSec + (remainSec - this.smoothedEtaSec) * smoothing;
++        this.smoothedEtaSec = smoothed;
++
++        // 显示层限幅（双向）：数字“变大”只能缓慢爬升（每秒 ≤ 0.3 秒），
++        // “变小”也只能以每秒约 1.6 秒的速度平滑逼近（缺口大时按比例放宽），
++        // 但永远不会当场跳水或暴冲。任何时刻动画都是受控的，不会一会儿大、一会儿小。
++        if (this.etaDisplayValue === null) {
++            this.etaDisplayValue = smoothed;
++            this.etaLastClimbTime = now;
++        } else if (smoothed < this.etaDisplayValue) {
++            const gap = this.etaDisplayValue - smoothed;
++            const fallSpeed = ETA_FALL_PER_SEC + gap * ETA_FALL_GAP_GAIN;
++            this.etaDisplayValue = Math.max(smoothed, this.etaDisplayValue - fallSpeed * dtEval);
++            this.etaLastClimbTime = now;
++        } else {
++            const climbSpan = Math.max(0, Math.min((now - this.etaLastClimbTime) / 1000, 1.2));
++            this.etaLastClimbTime = now;
++            this.etaDisplayValue = Math.min(
++                smoothed,
++                this.etaDisplayValue + ETA_CLIMB_UP_LIMIT * climbSpan
++            );
++        }
++
++        // 文本整数步进：屏幕文字每次最多变动 ±1 格——倒计时像秒表一样一格一格走，
++        // 底层浮点可以更快收敛，但文字不会出现“9 秒 → 5 秒”这种大跳格。
++        const targetSec = Math.max(1, Math.ceil(this.etaDisplayValue));
++        if (this.etaTextEditSec === null) {
++            this.etaTextEditSec = targetSec;
++        } else if (targetSec > this.etaTextEditSec + 1) {
++            this.etaTextEditSec += 1;
++        } else if (targetSec + 1 < this.etaTextEditSec) {
++            this.etaTextEditSec -= 1;
++        } else {
++            this.etaTextEditSec = targetSec;
++        }
++
++        const displaySec = this.etaTextEditSec;
++        let text;
++        if (displaySec < 60) {
++            text = `预计剩余 ${displaySec} 秒`;
++        } else {
++            const m = Math.floor(displaySec / 60);
++            const s = displaySec % 60;
++            text = `预计剩余 ${m} 分 ${s} 秒`;
++        }
++        if (text !== this.lastEtaText) {
++            this.lastEtaText = text;
++            this.etaEl.textContent = text;
+         }
+     }
+     handleProjectLoaded () {
+         if (this.ignoreProgress || !this.barInnerEl || !this.messageEl) {
+             return;
+         }
+-
+         this.ignoreProgress = true;
++        if (this.etaEl) this.etaEl.textContent = '';
+         this.props.vm.runtime.resetProgress();
+     }
+     barInnerRef (barInner) {
+@@ -105,6 +456,20 @@ class LoaderComponent extends React.Component {
+     messageRef (message) {
+         this.messageEl = message;
+     }
++    etaRef (el) {
++        this.etaEl = el;
++    }
++    canvasRef (c) {
++        this.canvasEl = c;
++        if (c) {
++            const dpr = window.devicePixelRatio || 1;
++            const cssSize = 260;
++            c.style.width = `${cssSize}px`;
++            c.style.height = `${cssSize}px`;
++            c.width = cssSize * dpr;
++            c.height = cssSize * dpr;
++        }
++    }
+     render () {
+         return (
+             <div
+@@ -112,40 +477,40 @@ class LoaderComponent extends React.Component {
+                     [styles.fullscreen]: this.props.isFullScreen
+                 })}
+             >
+-                <div className={styles.container}>
+-                    <div className={styles.blockAnimation}>
+-                        <img
+-                            className={styles.topBlock}
+-                            src={topBlock}
+-                            draggable={false}
+-                        />
+-                        <img
+-                            className={styles.middleBlock}
+-                            src={middleBlock}
+-                            draggable={false}
+-                        />
+-                        <img
+-                            className={styles.bottomBlock}
+-                            src={bottomBlock}
+-                            draggable={false}
+-                        />
++                <div className={styles.card}>
++                    <div className={styles.mainRow}>
++                        <div className={styles.left}>
++                            <canvas
++                                className={styles.particleCanvas}
++                                ref={this.canvasRef}
++                            />
++                        </div>
++                        <div className={styles.right}>
++                            <div className={styles.brand}>NeoWarp</div>
++                            {this.props.projectTitle ? (
++                                <div
++                                    className={styles.projectName}
++                                    title={this.props.projectTitle}
++                                >
++                                    {this.props.projectTitle}
++                                </div>
++                            ) : null}
++                            <div
++                                className={styles.message}
++                                ref={this.messageRef}
++                            />
++                        </div>
+                     </div>
+-
+-                    <div className={styles.title}>
+-                        {mainMessages[this.props.messageId]}
+-                    </div>
+-
+-                    <div
+-                        className={styles.message}
+-                        ref={this.messageRef}
+-                    />
+-
+                     <div className={styles.barOuter}>
+                         <div
+                             className={styles.barInner}
+                             ref={this.barInnerRef}
+                         />
+                     </div>
++                    <div
++                        className={styles.eta}
++                        ref={this.etaRef}
++                    />
+                 </div>
+             </div>
+         );
+@@ -157,6 +522,7 @@ LoaderComponent.propTypes = {
+     isFullScreen: PropTypes.bool,
+     isRemote: PropTypes.bool,
+     messageId: PropTypes.string,
++    projectTitle: PropTypes.string,
+     vm: PropTypes.shape({
+         on: PropTypes.func,
+         off: PropTypes.func,
+@@ -176,6 +542,7 @@ LoaderComponent.defaultProps = {
+ 
+ const mapStateToProps = state => ({
+     isRemote: getIsLoadingWithId(state.scratchGui.projectState.loadingState),
++    projectTitle: state.scratchGui.projectTitle,
+     vm: state.scratchGui.vm
+ });
+ 
+diff --git a/node_modules/scratch-gui/src/components/menu-bar/menu-bar.css b/node_modules/scratch-gui/src/components/menu-bar/menu-bar.css
+index 444e77c..d3eaac0 100644
+--- a/node_modules/scratch-gui/src/components/menu-bar/menu-bar.css
++++ b/node_modules/scratch-gui/src/components/menu-bar/menu-bar.css
+@@ -25,9 +25,9 @@
+         but fixes [FFx + Safari] [resize window down + scroll to the right] bug.
+         width: 100%;
+     */
+-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
++    font-family: 'HarmonyOS Sans SC', "Helvetica Neue", Helvetica, Arial, sans-serif;
+     font-size: $menu-bar-standard-font-size;
+-    font-weight: bold;
++    font-weight: 700;
+     background-color: $menu-bar-background;
+     background-image: $menu-bar-background-image;
+     color: $menu-bar-foreground;
+@@ -36,7 +36,7 @@
+ .main-menu {
+     display: flex;
+     flex-direction: row;
+-    justify-content: flex-start;
++    justify-content: center;
+     flex-wrap: nowrap;
+     align-items: center;
+     flex-grow: 1;
+@@ -76,12 +76,12 @@
+ 
+ .menu-bar-item.growable {
+     max-width: $menu-bar-item-max-width;
+-    flex: 1;
++    flex: 0 1 auto;
+ }
+ 
+ .title-field-growable {
+-    flex-grow: 1;
+-    width: 2rem;
++    flex-grow: 0;
++    width: 12rem;
+ }
+ 
+ .file-group {
+@@ -100,15 +100,38 @@
+     z-index: $z-index-menu-bar;
+ }
+ 
+-.feedback-link {
+-    color: $menu-bar-background;
+-    text-decoration: none;
++/* NeoWarp: System stats display */
++.system-stats {
++    display: flex;
++    align-items: center;
++    gap: 0.25rem;
++    font-size: 0.75rem;
++    color: $menu-bar-foreground;
++    background-color: rgba(255, 255, 255, 0.15);
++    padding: 0.25rem 0.5rem;
++    border-radius: 4px;
++    white-space: nowrap;
++    cursor: pointer;
++    transition: background-color 0.15s;
++}
++.system-stats:hover {
++    background-color: rgba(255, 255, 255, 0.25);
+ }
+ 
+-.feedback-button {
+-    background-color: white;
+-    color: inherit;
+-    height: 34px;
++.stat-label {
++    opacity: 0.8;
++    font-weight: normal;
++}
++
++.stat-value {
++    font-weight: bold;
++    min-width: 2.5rem;
++    text-align: center;
++}
++
++.stat-divider {
++    opacity: 0.5;
++    margin: 0 0.25rem;
+ }
+ 
+ .divider {
+@@ -186,6 +209,15 @@
+     margin-right: .5rem;
+ }
+ 
++/* NeoWarp: top-level dropdown carets turn around while their menu is open */
++.menu-caret {
++    transition: transform 0.15s cubic-bezier(0.32, 0.72, 0, 1);
++}
++
++.menu-bar-item.active .menu-caret {
++    transform: rotate(180deg);
++}
++
+ .disabled {
+     opacity: 0.5;
+ }
+diff --git a/node_modules/scratch-gui/src/components/menu-bar/menu-bar.jsx b/node_modules/scratch-gui/src/components/menu-bar/menu-bar.jsx
+index a742036..d93d1f6 100644
+--- a/node_modules/scratch-gui/src/components/menu-bar/menu-bar.jsx
++++ b/node_modules/scratch-gui/src/components/menu-bar/menu-bar.jsx
+@@ -94,6 +94,7 @@ import aboutIcon from './icon--about.svg';
+ import fileIcon from './icon--file.svg';
+ import editIcon from './icon--edit.svg';
+ import addonsIcon from './addons.svg';
++import aiIcon from './ai-icon.svg';
+ import errorIcon from './tw-error.svg';
+ import advancedIcon from './tw-advanced.svg';
+ 
+@@ -213,12 +214,14 @@ class MenuBar extends React.Component {
+         super(props);
+         bindAll(this, [
+             'handleClickSeeInside',
++            'handleOpenTaskManager',
+             'handleClickNew',
+             'handleClickNewWindow',
+             'handleClickRemix',
+             'handleClickSave',
+             'handleClickSaveAsCopy',
+             'handleClickPackager',
++            'handleClickEncryptedSave',
+             'handleClickDesktopSettings',
+             'handleClickRestorePoints',
+             'handleClickSeeCommunity',
+@@ -227,14 +230,81 @@ class MenuBar extends React.Component {
+             'handleKeyPress',
+             'handleRestoreOption',
+             'getSaveToComputerHandler',
+-            'restoreOptionMessage'
++            'restoreOptionMessage',
++            'handleOpenMoreMenu',
++            'handleMobilePreview',
++            'handleCloseMoreMenu',
++            'handleProjectAnalysis',
++            'handleTodoList',
++            'handleDetachStage',
++            'handleOpenCollabMenu',
++            'handleCloseCollabMenu',
++            'handleOpenCollabSubMenu',
++            'handleCloseCollabSubMenu',
++            'handleCollaborationHost',
++            'handleCollaborationJoin',
++            'handleCollaborationChat',
++            'handleEndOrLeaveCollaboration'
+         ]);
++        this.state = {
++            deviceStatsEnabled: true,
++            cpuUsage: '0%',
++            ramUsage: '0MB',
++            moreMenuOpen: false,
++            collaborationState: { isCollaborating: false, role: null, onlineCount: 0, permissions: null },
++            collabMenuOpen: false,
++            collabSubMenuOpen: false
++        };
++        this.statsInterval = null;
+     }
+     componentDidMount () {
+         document.addEventListener('keydown', this.handleKeyPress);
++        // NeoWarp: 顶栏设备占用显示开关（桌面设置 → UI 设置）：先同步读一次
++        // 初始值，再订阅变更。开关切换时这里 setState 直接移除/恢复顶部
++        // 「CPU/内存」块，菜单栏是 flex 布局（居中排列）会自动重新居中，
++        // 不需要重启编辑器。
++        if (typeof window !== 'undefined' && window.EditorPreload && window.EditorPreload.getTopBarDeviceStats) {
++            try {
++                this.setState({deviceStatsEnabled: window.EditorPreload.getTopBarDeviceStats() !== false});
++            } catch (e) {
++                // 读不到初始值就维持默认（显示）
++            }
++            if (window.EditorPreload.onTopBarDeviceStatsChanged) {
++                window.EditorPreload.onTopBarDeviceStatsChanged(enabled => {
++                    this.setState({deviceStatsEnabled: enabled !== false});
++                });
++            }
++        }
++        // NeoWarp: Start system stats monitoring
++        this.startSystemStatsMonitoring();
+     }
+     componentWillUnmount () {
+         document.removeEventListener('keydown', this.handleKeyPress);
++        // NeoWarp: Stop system stats monitoring
++        if (this.statsInterval) {
++            clearInterval(this.statsInterval);
++        }
++    }
++    startSystemStatsMonitoring () {
++        // Check if we're in Electron environment
++        if (typeof window !== 'undefined' && window.EditorPreload && window.EditorPreload.getSystemStats) {
++            const updateStats = async () => {
++                try {
++                    // 顶栏占用显示关闭期间不请求系统状态，省一次 IPC 往返；
++                    // 重新开启后下个刷新周期会立刻拿到最新值
++                    if (!this.state.deviceStatsEnabled) return;
++                    const stats = await window.EditorPreload.getSystemStats();
++                    this.setState({
++                        cpuUsage: stats.cpuPercent + '%',
++                        ramUsage: stats.ramUsedMB + 'MB'
++                    });
++                } catch (e) {
++                    // Ignore errors
++                }
++            };
++            updateStats();
++            this.statsInterval = setInterval(updateStats, 2000);
++        }
+     }
+     handleClickNew () {
+         // if the project is dirty, and user owns the project, we will autosave.
+@@ -271,6 +341,10 @@ class MenuBar extends React.Component {
+         this.props.onClickPackager();
+         this.props.onRequestCloseFile();
+     }
++    handleClickEncryptedSave () {
++        this.props.onClickEncryptedSave();
++        this.props.onRequestCloseFile();
++    }
+     handleClickDesktopSettings () {
+         this.props.onClickDesktopSettings();
+         this.props.onRequestCloseSettings();
+@@ -338,7 +412,7 @@ class MenuBar extends React.Component {
+     }
+     handleKeyPress (event) {
+         const modifier = bowser.mac ? event.metaKey : event.ctrlKey;
+-        if (modifier) {
++        if (modifier && !this.props.isViewOnly) {
+             if (event.key.toLowerCase() === 's') {
+                 this.props.handleSaveProject();
+                 event.preventDefault();    
+@@ -387,9 +461,82 @@ class MenuBar extends React.Component {
+         }
+         }
+     }
++    handleOpenMoreMenu () {
++        this.setState({ moreMenuOpen: true });
++    }
++    handleCloseMoreMenu () {
++        this.setState({ moreMenuOpen: false });
++    }
++    handleProjectAnalysis () {
++        this.handleCloseMoreMenu();
++        if (this.props.onClickProjectAnalysis) {
++            this.props.onClickProjectAnalysis();
++        }
++    }
++    handleTodoList () {
++        this.handleCloseMoreMenu();
++        if (this.props.onClickTodoList) {
++            this.props.onClickTodoList();
++        }
++    }
++    handleDetachStage () {
++        this.handleCloseMoreMenu();
++        if (this.props.onClickDetachStage) {
++            this.props.onClickDetachStage();
++        }
++    }
++    handleMobilePreview () {
++        this.handleCloseMoreMenu();
++        if (this.props.onClickMobilePreview) {
++            this.props.onClickMobilePreview();
++        }
++    }
++    handleOpenCollabMenu () {
++        this.setState({ collabMenuOpen: true });
++    }
++    handleCloseCollabMenu () {
++        this.setState({ collabMenuOpen: false, collabSubMenuOpen: false });
++    }
++    handleOpenCollabSubMenu () {
++        this.setState({ collabSubMenuOpen: true });
++    }
++    handleCloseCollabSubMenu () {
++        this.setState({ collabSubMenuOpen: false });
++    }
++    handleCollaborationHost () {
++        this.handleCloseMoreMenu();
++        if (this.props.onClickCollaborationHost) {
++            this.props.onClickCollaborationHost();
++        }
++    }
++    handleCollaborationJoin () {
++        this.handleCloseMoreMenu();
++        if (this.props.onClickCollaborationJoin) {
++            this.props.onClickCollaborationJoin();
++        }
++    }
++    handleCollaborationChat () {
++        if (this.props.onClickCollaborationChat) {
++            this.props.onClickCollaborationChat();
++        }
++    }
++    handleEndOrLeaveCollaboration () {
++        this.handleCloseMoreMenu();
++        const collabState = this.props.collaborationState || {};
++        if (collabState.role === 'host' && this.props.onClickEndCollaboration) {
++            this.props.onClickEndCollaboration();
++        } else if (collabState.role === 'participant' && this.props.onClickLeaveCollaboration) {
++            this.props.onClickLeaveCollaboration();
++        }
++    }
+     handleClickSeeInside () {
+         this.props.onClickSeeInside();
+     }
++    handleOpenTaskManager () {
++        if (typeof window !== 'undefined' && window.EditorPreload && window.EditorPreload.openTaskManager) {
++            window.EditorPreload.openTaskManager();
++        }
++    }
+     buildAboutMenu (onClickAbout) {
+         if (!onClickAbout) {
+             // hide the button
+@@ -492,6 +639,42 @@ class MenuBar extends React.Component {
+             >
+                 <div className={styles.mainMenu}>
+                     <div className={styles.fileGroup}>
++                        {/* NeoWarp: Collaboration status indicator */}
++                        {this.props.collaborationState && this.props.collaborationState.isCollaborating && (
++                            <div
++                                className={classNames(styles.menuBarItem, styles.hoverable, styles.collabStatus)}
++                                onClick={this.handleCollaborationChat}
++                                style={{
++                                    backgroundColor: 'rgba(0, 122, 255, 0.15)',
++                                    borderRadius: '8px',
++                                    padding: '0 12px',
++                                    margin: '0 4px',
++                                    cursor: 'pointer',
++                                    display: 'flex',
++                                    alignItems: 'center',
++                                    gap: '6px'
++                                }}
++                            >
++                                <span style={{
++                                    width: '8px',
++                                    height: '8px',
++                                    borderRadius: '50%',
++                                    backgroundColor: '#34C759',
++                                    display: 'inline-block'
++                                }} />
++                                <span style={{
++                                    color: '#007AFF',
++                                    fontSize: '13px',
++                                    fontWeight: '500',
++                                    whiteSpace: 'nowrap'
++                                }}>
++                                    {this.props.collaborationState.role === 'host'
++                                        ? `协作中-管理员-在线人数 : ${this.props.collaborationState.onlineCount}`
++                                        : '协作中-参与者'
++                                    }
++                                </span>
++                            </div>
++                        )}
+                         {this.props.errors.length > 0 && <div>
+                             <MenuLabel
+                                 open={this.props.errorsMenuOpen}
+@@ -505,6 +688,7 @@ class MenuBar extends React.Component {
+                                     height={20}
+                                 />
+                                 <img
++                                    className={styles.menuCaret}
+                                     src={dropdownCaret}
+                                     draggable={false}
+                                     width={8}
+@@ -561,7 +745,7 @@ class MenuBar extends React.Component {
+                             onRequestOpen={this.props.onClickSettings}
+                             settingsMenuOpen={this.props.settingsMenuOpen}
+                         />)}
+-                        {(this.props.canManageFiles) && (
++                        {(this.props.canManageFiles && !this.props.isViewOnly) && (
+                             <MenuLabel
+                                 open={this.props.fileMenuOpen}
+                                 onOpen={this.props.onClickFile}
+@@ -581,6 +765,7 @@ class MenuBar extends React.Component {
+                                     />
+                                 </span>
+                                 <img
++                                    className={styles.menuCaret}
+                                     src={dropdownCaret}
+                                     draggable={false}
+                                     width={8}
+@@ -637,6 +822,7 @@ class MenuBar extends React.Component {
+                                         </MenuItem>
+                                         <SB3Downloader
+                                             showSaveFilePicker={this.props.showSaveFilePicker}
++                                            onViewsb3Save={this.props.onViewsb3Save}
+                                         >
+                                             {(_className, downloadProject, extended) => (
+                                                 <React.Fragment>
+@@ -665,6 +851,16 @@ class MenuBar extends React.Component {
+                                                                     id="tw.saveAs"
+                                                                 />
+                                                             </MenuItem>
++                                                            {extended.saveAsViewsb3 && (
++                                                                <MenuItem onClick={extended.saveAsViewsb3}>
++                                                                    <FormattedMessage
++                                                                        defaultMessage="Save as view-only..."
++                                                                        // eslint-disable-next-line max-len
++                                                                        description="Menu bar item to save a view-only .viewsb3 file for sharing"
++                                                                        id="tw.menuBar.saveAsViewOnly"
++                                                                    />
++                                                                </MenuItem>
++                                                            )}
+                                                         </React.Fragment>
+                                                     )}
+                                                     {notScratchDesktop() && (
+@@ -691,6 +887,19 @@ class MenuBar extends React.Component {
+                                             )}
+                                         </SB3Downloader>
+                                     </MenuSection>
++                                    {this.props.onClickEncryptedSave && (
++                                        <MenuSection>
++                                            <MenuItem
++                                                onClick={this.handleClickEncryptedSave}
++                                            >
++                                                <FormattedMessage
++                                                    defaultMessage="Encrypted save..."
++                                                    description="Menu bar item to save project with encryption"
++                                                    id="tw.menuBar.encryptedSave"
++                                                />
++                                            </MenuItem>
++                                        </MenuSection>
++                                    )}
+                                     {this.props.onClickPackager && (
+                                         <MenuSection>
+                                             <MenuItem
+@@ -736,6 +945,7 @@ class MenuBar extends React.Component {
+                                 />
+                             </span>
+                             <img
++                                className={styles.menuCaret}
+                                 src={dropdownCaret}
+                                 draggable={false}
+                                 width={8}
+@@ -925,6 +1135,79 @@ class MenuBar extends React.Component {
+                                 </span>
+                             </div>
+                         )}
++                        {this.props.onClickAI && (
++                            <div
++                                className={classNames(styles.menuBarItem, styles.hoverable)}
++                                onClick={this.props.onClickAI}
++                            >
++                                <img
++                                    src={aiIcon}
++                                    draggable={false}
++                                    width={20}
++                                    height={20}
++                                />
++                                <span className={styles.collapsibleLabel}>AI</span>
++                            </div>
++                        )}
++                        <MenuLabel
++                            open={this.state.moreMenuOpen}
++                            onOpen={this.handleOpenMoreMenu}
++                            onClose={this.handleCloseMoreMenu}
++                        >
++                            <svg
++                                width="20"
++                                height="20"
++                                viewBox="0 0 24 24"
++                                fill="currentColor"
++                                style={{ verticalAlign: 'middle' }}
++                            >
++                                <circle cx="5" cy="12" r="2" />
++                                <circle cx="12" cy="12" r="2" />
++                                <circle cx="19" cy="12" r="2" />
++                            </svg>
++                            <span className={styles.collapsibleLabel}>更多</span>
++                            <img
++                                className={styles.menuCaret}
++                                src={dropdownCaret}
++                                draggable={false}
++                                width={8}
++                                height={5}
++                            />
++                            <MenuBarMenu
++                                className={classNames(styles.menuBarMenu)}
++                                open={this.state.moreMenuOpen}
++                                place={this.props.isRtl ? 'left' : 'right'}
++                            >
++                                <MenuSection>
++                                    <MenuItem onClick={this.handleProjectAnalysis}>
++                                        项目分析
++                                    </MenuItem>
++                                    <MenuItem onClick={this.handleTodoList}>
++                                        待办清单
++                                    </MenuItem>
++                                    <MenuItem onClick={this.handleDetachStage}>
++                                        分离舞台
++                                    </MenuItem>
++                                    <MenuItem onClick={this.handleMobilePreview}>
++                                        手机预览
++                                    </MenuItem>
++                                    {this.props.collaborationState && this.props.collaborationState.isCollaborating ? (
++                                        <MenuItem onClick={this.handleEndOrLeaveCollaboration}>
++                                            {this.props.collaborationState.role === 'host' ? '结束协作' : '退出协作'}
++                                        </MenuItem>
++                                    ) : (
++                                        <>
++                                            <MenuItem onClick={this.handleCollaborationHost}>
++                                                发起协作
++                                            </MenuItem>
++                                            <MenuItem onClick={this.handleCollaborationJoin}>
++                                                加入协作
++                                            </MenuItem>
++                                        </>
++                                    )}
++                                </MenuSection>
++                            </MenuBarMenu>
++                        </MenuLabel>
+                     </div>
+ 
+                     <Divider className={styles.divider} />
+@@ -1011,27 +1294,24 @@ class MenuBar extends React.Component {
+                             />
+                         ) : []))}
+                     </div>
+-                    {/* tw: add a feedback button */}
+-                    <div className={styles.menuBarItem}>
+-                        <a
+-                            className={styles.feedbackLink}
+-                            href="https://scratch.mit.edu/users/GarboMuffin/#comments"
+-                            rel="noopener noreferrer"
+-                            target="_blank"
+-                        >
+-                            {/* todo: icon */}
+-                            <Button className={styles.feedbackButton}>
+-                                <FormattedMessage
+-                                    defaultMessage="{APP_NAME} Feedback"
+-                                    description="Button to give feedback in the menu bar"
+-                                    id="tw.feedbackButton"
+-                                    values={{
+-                                        APP_NAME
+-                                    }}
+-                                />
+-                            </Button>
+-                        </a>
+-                    </div>
++                    {/* NeoWarp: CPU and RAM usage display（桌面设置 → UI 设置可开关，
++                        关闭时元素卸载后顶栏 flex 布局自动重新居中） */}
++                    {this.state.deviceStatsEnabled && (
++                        <div className={styles.menuBarItem}>
++                            <div
++                                className={styles.systemStats}
++                                onClick={this.handleOpenTaskManager}
++                                style={{cursor: 'pointer'}}
++                                title="点击打开任务管理器"
++                            >
++                                <span className={styles.statLabel}>CPU:</span>
++                                <span className={styles.statValue}>{this.state.cpuUsage}</span>
++                                <span className={styles.statDivider}>|</span>
++                                <span className={styles.statLabel}>RAM:</span>
++                                <span className={styles.statValue}>{this.state.ramUsage}</span>
++                            </div>
++                        </div>
++                    )}
+                 </div>
+ 
+                 <div className={styles.accountInfoGroup}>
+@@ -1068,6 +1348,7 @@ MenuBar.propTypes = {
+     canCreateNew: PropTypes.bool,
+     canEditTitle: PropTypes.bool,
+     canManageFiles: PropTypes.bool,
++    isViewOnly: PropTypes.bool,
+     canRemix: PropTypes.bool,
+     canSave: PropTypes.bool,
+     canShare: PropTypes.bool,
+@@ -1114,6 +1395,7 @@ MenuBar.propTypes = {
+     onClickAddonSettings: PropTypes.func,
+     onClickDesktopSettings: PropTypes.func,
+     onClickPackager: PropTypes.func,
++    onClickEncryptedSave: PropTypes.func,
+     onClickRestorePoints: PropTypes.func,
+     onClickEdit: PropTypes.func,
+     onClickFile: PropTypes.func,
+@@ -1126,6 +1408,19 @@ MenuBar.propTypes = {
+     onClickSaveAsCopy: PropTypes.func,
+     onClickSettings: PropTypes.func,
+     onClickSettingsModal: PropTypes.func,
++    onClickAI: PropTypes.func,
++    onClickMobilePreview: PropTypes.func,
++    onClickCollaborationHost: PropTypes.func,
++    onClickCollaborationJoin: PropTypes.func,
++    onClickCollaborationChat: PropTypes.func,
++    onClickEndCollaboration: PropTypes.func,
++    onClickLeaveCollaboration: PropTypes.func,
++    collaborationState: PropTypes.shape({
++        isCollaborating: PropTypes.bool,
++        role: PropTypes.string,
++        onlineCount: PropTypes.number,
++        permissions: PropTypes.object
++    }),
+     onLogOut: PropTypes.func,
+     onOpenRegistration: PropTypes.func,
+     onOpenTipLibrary: PropTypes.func,
+@@ -1175,6 +1470,7 @@ const mapStateToProps = (state, ownProps) => {
+         errors: state.scratchGui.tw.compileErrors,
+         errorsMenuOpen: errorsMenuOpen(state),
+         isPlayerOnly: state.scratchGui.mode.isPlayerOnly,
++        isViewOnly: state.scratchGui.mode.isViewOnly,
+         isRtl: state.locales.isRtl,
+         isUpdating: getIsUpdating(loadingState),
+         isShowingProject: getIsShowingProject(loadingState),
+diff --git a/node_modules/scratch-gui/src/components/menu-bar/project-title-input.css b/node_modules/scratch-gui/src/components/menu-bar/project-title-input.css
+index 21108fa..88e6e4c 100644
+--- a/node_modules/scratch-gui/src/components/menu-bar/project-title-input.css
++++ b/node_modules/scratch-gui/src/components/menu-bar/project-title-input.css
+@@ -10,26 +10,27 @@ can set a width for example or what it should do in a flex box (eg. grow).
+ 
+ .title-field {
+     border: 1px dashed $ui-black-transparent;
+-    border-radius: $form-radius;
+-    -webkit-border-radius: $form-radius;
+-    -moz-border-radius: $form-radius;
++    border-radius: 20px;
++    -webkit-border-radius: 20px;
++    -moz-border-radius: 20px;
+     background-color: $project-title-inactive;
+     background-clip: padding-box;
+     -webkit-background-clip: padding-box;
+     height: auto;
+-    padding: .5rem;
++    padding: .5rem 1rem;
+ }
+ 
+ .title-field {
+     color: $menu-bar-foreground;
+-    font-weight: bold;
++    font-weight: 700;
+     font-size: .8rem;
++    font-family: 'HarmonyOS Sans SC', "Helvetica Neue", Helvetica, Arial, sans-serif;
+ }
+ 
+ .title-field::placeholder {
+     color: $menu-bar-foreground;
+     opacity: 0.8;
+-    font-weight: normal;
++    font-weight: 400;
+     font-size: .8rem;
+     font-style: italic;
+ }
+diff --git a/node_modules/scratch-gui/src/components/menu-bar/settings-menu.jsx b/node_modules/scratch-gui/src/components/menu-bar/settings-menu.jsx
+index f0611ea..9ae739f 100644
+--- a/node_modules/scratch-gui/src/components/menu-bar/settings-menu.jsx
++++ b/node_modules/scratch-gui/src/components/menu-bar/settings-menu.jsx
+@@ -46,6 +46,7 @@ const SettingsMenu = ({
+             />
+         </span>
+         <img
++            className={menuBarStyles.menuCaret}
+             src={dropdownCaret}
+             draggable={false}
+             width={8}
+diff --git a/node_modules/scratch-gui/src/components/menu/menu.css b/node_modules/scratch-gui/src/components/menu/menu.css
+index c36368a..e306891 100644
+--- a/node_modules/scratch-gui/src/components/menu/menu.css
++++ b/node_modules/scratch-gui/src/components/menu/menu.css
+@@ -10,16 +10,54 @@
+     min-width: 186px;
+     overflow: visible;
+     box-shadow: 0 8px 8px 0 $shadow;
++
++    /* NeoWarp: animate the dropdown opening */
++    transform-origin: top left;
++    animation: menu-in 0.2s cubic-bezier(0.32, 0.72, 0, 1) backwards;
+ }
+ 
+ .menu.left {
+     right: 0;
++
++    /* menus placed on the right side of the trigger (RTL layout) reveal from their right edge */
++    transform-origin: top right;
+ }
+ 
+ .menu.right {
+     left: 0;
+ }
+ 
++/* NeoWarp: keep the menu mounted while it fades/shrinks out; ignore clicks meanwhile.
++   Duration must stay <= CLOSE_DELAY_MS in containers/menu.jsx */
++.menu.closing {
++    pointer-events: none;
++    animation: menu-out 0.16s cubic-bezier(0.32, 0.72, 0, 1) both;
++}
++
++/* NeoWarp */
++@keyframes menu-in {
++    from {
++        opacity: 0;
++        transform: translateY(8px) scale(0.96);
++    }
++    to {
++        opacity: 1;
++        transform: translateY(0) scale(1);
++    }
++}
++
++/* NeoWarp */
++@keyframes menu-out {
++    from {
++        opacity: 1;
++        transform: translateY(0) scale(1);
++    }
++    to {
++        opacity: 0;
++        transform: translateY(8px) scale(0.96);
++    }
++}
++
+ .menu-item {
+     display: block;
+     line-height: 34px;
+diff --git a/node_modules/scratch-gui/src/components/modal/modal.css b/node_modules/scratch-gui/src/components/modal/modal.css
+index 5bf1e6d..0365b76 100644
+--- a/node_modules/scratch-gui/src/components/modal/modal.css
++++ b/node_modules/scratch-gui/src/components/modal/modal.css
+@@ -9,7 +9,9 @@
+     right: 0;
+     bottom: 0;
+     z-index: $z-index-modal;
+-    background-color: $ui-modal-overlay;
++    background-color: rgba(0, 0, 0, 0.3);
++    backdrop-filter: blur(8px);
++    -webkit-backdrop-filter: blur(8px);
+     color: $ui-modal-foreground;
+ }
+ 
+@@ -25,7 +27,7 @@
+     border-radius: $space;
+     user-select: none;
+ 
+-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
++    font-family: 'HarmonyOS Sans SC', "Helvetica Neue", Helvetica, Arial, sans-serif;
+     overflow: hidden;
+ }
+ 
+@@ -70,9 +72,9 @@ $sides: 20rem;
+     background-color: $ui-modal-header-background;
+     color: $ui-modal-header-foreground;
+ 
+-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
++    font-family: 'HarmonyOS Sans SC', "Helvetica Neue", Helvetica, Arial, sans-serif;
+     font-size: 1rem;
+-    font-weight: normal;
++    font-weight: 700;
+ }
+ 
+ .header-item {
+diff --git a/node_modules/scratch-gui/src/components/prompt/prompt.css b/node_modules/scratch-gui/src/components/prompt/prompt.css
+index 1404ae7..77133c0 100644
+--- a/node_modules/scratch-gui/src/components/prompt/prompt.css
++++ b/node_modules/scratch-gui/src/components/prompt/prompt.css
+@@ -16,7 +16,7 @@
+ }
+ 
+ .label {
+-    font-weight: 500;
++    font-weight: 700;
+     margin: 0 0 0.75rem;
+ }
+ 
+@@ -34,10 +34,11 @@
+     color: $text-primary-transparent;
+     background-color: $input-background;
+     font-size: .875rem;
++    font-family: 'HarmonyOS Sans SC', "Helvetica Neue", Helvetica, Arial, sans-serif;
+ }
+ 
+ .info-message {
+-    font-weight: normal;
++    font-weight: 400;
+     font-size: .875rem;
+     margin-bottom: 1.5rem;
+     text-align: center;
+@@ -45,13 +46,13 @@
+ 
+ .options-row {
+     display: flex;
+-    font-weight: normal;
++    font-weight: 400;
+     justify-content: space-between;
+     margin-bottom: 1.5rem;
+ }
+ 
+ .button-row {
+-    font-weight: bolder;
++    font-weight: 700;
+     text-align: right;
+ }
+ 
+@@ -61,8 +62,9 @@
+     background: white;
+     color: black;
+     border: 1px solid $ui-black-transparent;
+-    font-weight: 600;
++    font-weight: 700;
+     font-size: 0.85rem;
++    font-family: 'HarmonyOS Sans SC', "Helvetica Neue", Helvetica, Arial, sans-serif;
+ }
+ 
+ .button-row button.ok-button {
+diff --git a/node_modules/scratch-gui/src/components/sprite-selector/sprite-selector.jsx b/node_modules/scratch-gui/src/components/sprite-selector/sprite-selector.jsx
+index a3d3c24..406c61e 100644
+--- a/node_modules/scratch-gui/src/components/sprite-selector/sprite-selector.jsx
++++ b/node_modules/scratch-gui/src/components/sprite-selector/sprite-selector.jsx
+@@ -17,6 +17,8 @@ import spriteIcon from '../action-menu/icon--sprite.svg';
+ import surpriseIcon from '../action-menu/icon--surprise.svg';
+ import searchIcon from '../action-menu/icon--search.svg';
+ 
++const urlIcon = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
++
+ const messages = defineMessages({
+     addSpriteFromLibrary: {
+         id: 'gui.spriteSelector.addSpriteFromLibrary',
+@@ -37,6 +39,11 @@ const messages = defineMessages({
+         id: 'gui.spriteSelector.addSpriteFromFile',
+         description: 'Button to add a sprite in the target pane from file',
+         defaultMessage: 'Upload Sprite'
++    },
++    addSpriteFromUrl: {
++        id: 'gui.spriteSelector.addSpriteFromUrl',
++        description: 'Button to add a sprite from URL',
++        defaultMessage: 'Add Sprite from URL'
+     }
+ });
+ 
+@@ -60,6 +67,7 @@ const SpriteSelectorComponent = function (props) {
+         onNewSpriteClick,
+         onPaintSpriteClick,
+         onSelectSprite,
++        onSpriteFromUrlClick,
+         onSpriteUpload,
+         onSurpriseSpriteClick,
+         raised,
+@@ -136,6 +144,10 @@ const SpriteSelectorComponent = function (props) {
+                         title: intl.formatMessage(messages.addSpriteFromLibrary),
+                         img: searchIcon,
+                         onClick: onNewSpriteClick
++                    }, {
++                        title: intl.formatMessage(messages.addSpriteFromUrl),
++                        img: urlIcon,
++                        onClick: onSpriteFromUrlClick
+                     }
+                 ]}
+                 title={intl.formatMessage(messages.addSpriteFromLibrary)}
+@@ -168,6 +180,7 @@ SpriteSelectorComponent.propTypes = {
+     onNewSpriteClick: PropTypes.func,
+     onPaintSpriteClick: PropTypes.func,
+     onSelectSprite: PropTypes.func,
++    onSpriteFromUrlClick: PropTypes.func,
+     onSpriteUpload: PropTypes.func,
+     onSurpriseSpriteClick: PropTypes.func,
+     raised: PropTypes.bool,
+diff --git a/node_modules/scratch-gui/src/components/stage-header/stage-header.jsx b/node_modules/scratch-gui/src/components/stage-header/stage-header.jsx
+index 4059478..e2b4693 100644
+--- a/node_modules/scratch-gui/src/components/stage-header/stage-header.jsx
++++ b/node_modules/scratch-gui/src/components/stage-header/stage-header.jsx
+@@ -69,6 +69,7 @@ const StageHeaderComponent = function (props) {
+         showFixedLargeSize,
+         isFullScreen,
+         isPlayerOnly,
++        isViewOnly,
+         onKeyPress,
+         onSetStageFullScreen,
+         onSetStageUnFullScreen,
+@@ -104,21 +105,23 @@ const StageHeaderComponent = function (props) {
+             </div>
+         ) : null;
+         const fullscreenButton = isFullScreen ? (
+-            <div className={styles.unselectWrapper}>
+-                <Button
+-                    className={styles.stageButton}
+-                    onClick={onSetStageUnFullScreen}
+-                    onKeyPress={onKeyPress}
+-                >
+-                    <img
+-                        alt={props.intl.formatMessage(messages.unFullScreenMessage)}
+-                        className={styles.stageButtonIcon}
+-                        draggable={false}
+-                        src={unFullScreenIcon}
+-                        title={props.intl.formatMessage(messages.fullscreenControl)}
+-                    />
+-                </Button>
+-            </div>
++            !isViewOnly ? (
++                <div className={styles.unselectWrapper}>
++                    <Button
++                        className={styles.stageButton}
++                        onClick={onSetStageUnFullScreen}
++                        onKeyPress={onKeyPress}
++                    >
++                        <img
++                            alt={props.intl.formatMessage(messages.unFullScreenMessage)}
++                            className={styles.stageButtonIcon}
++                            draggable={false}
++                            src={unFullScreenIcon}
++                            title={props.intl.formatMessage(messages.fullscreenControl)}
++                        />
++                    </Button>
++                </div>
++            ) : null
+         ) : FullscreenAPI.available() ? (
+             <div className={styles.unselectWrapper}>
+                 <Button
+@@ -244,6 +247,7 @@ StageHeaderComponent.propTypes = {
+     showFixedLargeSize: PropTypes.bool,
+     isFullScreen: PropTypes.bool.isRequired,
+     isPlayerOnly: PropTypes.bool.isRequired,
++    isViewOnly: PropTypes.bool,
+     onKeyPress: PropTypes.func.isRequired,
+     onSetStageFullScreen: PropTypes.func.isRequired,
+     onSetStageUnFullScreen: PropTypes.func.isRequired,
+diff --git a/node_modules/scratch-gui/src/components/target-pane/target-pane.jsx b/node_modules/scratch-gui/src/components/target-pane/target-pane.jsx
+index 8d9a099..fa8add1 100644
+--- a/node_modules/scratch-gui/src/components/target-pane/target-pane.jsx
++++ b/node_modules/scratch-gui/src/components/target-pane/target-pane.jsx
+@@ -38,6 +38,7 @@ const TargetPane = ({
+     onPaintSpriteClick,
+     onRequestCloseSpriteLibrary,
+     onSelectSprite,
++    onSpriteFromUrlClick,
+     onSpriteUpload,
+     onSurpriseSpriteClick,
+     raiseSprites,
+@@ -75,6 +76,7 @@ const TargetPane = ({
+             onNewSpriteClick={onNewSpriteClick}
+             onPaintSpriteClick={onPaintSpriteClick}
+             onSelectSprite={onSelectSprite}
++            onSpriteFromUrlClick={onSpriteFromUrlClick}
+             onSpriteUpload={onSpriteUpload}
+             onSurpriseSpriteClick={onSurpriseSpriteClick}
+         />
+@@ -151,6 +153,7 @@ TargetPane.propTypes = {
+     onRequestCloseExtensionLibrary: PropTypes.func,
+     onRequestCloseSpriteLibrary: PropTypes.func,
+     onSelectSprite: PropTypes.func,
++    onSpriteFromUrlClick: PropTypes.func,
+     onSpriteUpload: PropTypes.func,
+     onSurpriseSpriteClick: PropTypes.func,
+     raiseSprites: PropTypes.bool,
+diff --git a/node_modules/scratch-gui/src/components/tw-invalid-project-modal/invalid-project-modal.jsx b/node_modules/scratch-gui/src/components/tw-invalid-project-modal/invalid-project-modal.jsx
+index 0a1aeff..0eb873e 100644
+--- a/node_modules/scratch-gui/src/components/tw-invalid-project-modal/invalid-project-modal.jsx
++++ b/node_modules/scratch-gui/src/components/tw-invalid-project-modal/invalid-project-modal.jsx
+@@ -92,7 +92,7 @@ const InvalidProjectModal = props => (
+                         values={{
+                             reportIt: (
+                                 <a
+-                                    href="https://github.com/TurboWarp/sb3fix/issues"
++                                    href="https://github.com/Shiyuan-318/NeoWarp/issues"
+                                     target="_blank"
+                                     rel="noreferrer"
+                                 >
+diff --git a/node_modules/scratch-gui/src/components/tw-my-extension-modal/my-extension-modal.css b/node_modules/scratch-gui/src/components/tw-my-extension-modal/my-extension-modal.css
+new file mode 100644
+index 0000000..9614304
+--- /dev/null
++++ b/node_modules/scratch-gui/src/components/tw-my-extension-modal/my-extension-modal.css
+@@ -0,0 +1,138 @@
++@import "../../css/colors.css";
++@import "../../css/filters.css";
++@import "../../css/default-colors.css";
++
++.modal-content {
++    max-width: 600px;
++    margin-top: 50px;
++}
++
++.body {
++    background: $ui-modal-background;
++    padding: 1.5rem 2.25rem;
++    min-height: 150px;
++    max-height: calc(100vh - 250px);
++    overflow-y: auto;
++}
++
++.setting {
++    display: flex;
++    flex-direction: column;
++    padding: 0.5rem 1rem;
++    margin: 0.25rem 0;
++    border-radius: 8px;
++}
++
++.setting:hover,
++.setting:focus-within {
++    background: $badge-border;
++}
++
++.label {
++    height: 32px;
++    display: flex;
++    flex-direction: row;
++    align-items: center;
++    font-weight: 600;
++}
++
++.setting-input {
++    width: 100%;
++    border: 1px solid $ui-black-transparent;
++    border-radius: 6px;
++    padding: 0.5rem;
++    font-size: inherit;
++    font-family: inherit;
++    box-sizing: border-box;
++}
++
++.file-button {
++    font-family: inherit;
++    font-size: 14px;
++    background-color: $looks-secondary;
++    color: white;
++    border: none;
++    padding: 0.5rem 1rem;
++    margin: 0.25rem 0;
++    border-radius: 8px;
++    cursor: pointer;
++    font-weight: bold;
++    width: fit-content;
++}
++
++.file-button:active,
++.file-button:focus-within {
++    box-shadow: 0 0 0 3px $looks-transparent;
++}
++
++.image-preview {
++    max-width: 80px;
++    max-height: 80px;
++    border-radius: 8px;
++    border: 1px solid $ui-black-transparent;
++    margin: 0.25rem 0;
++}
++
++.checkbox-container {
++    display: flex;
++    align-items: center;
++}
++
++.checkbox {
++    margin-right: 0.5rem;
++    width: 18px;
++    height: 18px;
++    cursor: pointer;
++}
++
++.button-row {
++    display: flex;
++    justify-content: flex-end;
++    margin-top: 1rem;
++    gap: 0.5rem;
++}
++
++.cancel-button {
++    font-family: inherit;
++    font-size: 14px;
++    color: $text-primary;
++    background-color: $ui-white;
++    border: 1px solid $ui-black-transparent;
++    padding: 0.5rem 1rem;
++    border-radius: 8px;
++    cursor: pointer;
++    font-weight: bold;
++}
++
++.save-button {
++    font-family: inherit;
++    font-size: 14px;
++    color: white;
++    background-color: $looks-secondary;
++    border: none;
++    padding: 0.5rem 1rem;
++    border-radius: 8px;
++    cursor: pointer;
++    font-weight: bold;
++}
++
++.save-button:disabled {
++    opacity: 0.5;
++    cursor: auto;
++}
++
++.file-name {
++    font-size: 0.85rem;
++    color: $text-primary;
++    opacity: 0.75;
++    margin: 0.25rem 0;
++}
++
++.warning {
++    padding: 0.5rem 1rem;
++    margin: 0.25rem 0;
++    border-radius: 8px;
++    background: rgba(255, 81, 81, 0.25);
++    border: 1px solid red;
++    font-size: 0.85rem;
++}
+diff --git a/node_modules/scratch-gui/src/components/tw-my-extension-modal/my-extension-modal.jsx b/node_modules/scratch-gui/src/components/tw-my-extension-modal/my-extension-modal.jsx
+new file mode 100644
+index 0000000..cc2846c
+--- /dev/null
++++ b/node_modules/scratch-gui/src/components/tw-my-extension-modal/my-extension-modal.jsx
+@@ -0,0 +1,259 @@
++import PropTypes from 'prop-types';
++import React from 'react';
++import bindAll from 'lodash.bindall';
++import Box from '../box/box.jsx';
++import Modal from '../../containers/modal.jsx';
++import styles from './my-extension-modal.css';
++
++/**
++ * Read a Blob as a data URL.
++ * @param {Blob} blob
++ * @returns {Promise<string>} data: uri
++ */
++const readAsDataURL = blob => new Promise((resolve, reject) => {
++    const reader = new FileReader();
++    reader.onload = () => resolve(reader.result);
++    reader.onerror = () => reject(new Error(`Could not read file as data URL: ${reader.error}`));
++    reader.readAsDataURL(blob);
++});
++
++class MyExtensionModal extends React.Component {
++    constructor (props) {
++        super(props);
++        bindAll(this, [
++            'handleClose',
++            'handleSave',
++            'handleNameChange',
++            'handleExtensionFileClick',
++            'handleImageFileClick',
++            'handleUnsandboxedChange',
++            'handleAutoAddChange'
++        ]);
++        const editing = props.editExtension;
++        this.state = {
++            name: editing ? editing.name : '',
++            extensionURL: editing ? editing.extensionURL : '',
++            extensionFileName: editing ? (editing.extensionFileName || '') : '',
++            iconURL: editing ? editing.iconURL : '',
++            unsandboxed: editing ? editing.unsandboxed : false,
++            autoAddToNewProjects: editing ? !!editing.autoAddToNewProjects : false
++        };
++    }
++
++    handleClose () {
++        this.props.onClose();
++    }
++
++    async handleSave () {
++        const data = {
++            name: this.state.name,
++            extensionURL: this.state.extensionURL,
++            extensionFileName: this.state.extensionFileName,
++            iconURL: this.state.iconURL,
++            unsandboxed: this.state.unsandboxed,
++            autoAddToNewProjects: this.state.autoAddToNewProjects
++        };
++        this.props.onSave(data);
++    }
++
++    handleNameChange (e) {
++        this.setState({name: e.target.value});
++    }
++
++    handleUnsandboxedChange (e) {
++        this.setState({unsandboxed: e.target.checked});
++    }
++
++    handleAutoAddChange (e) {
++        this.setState({autoAddToNewProjects: e.target.checked});
++    }
++
++    async handleExtensionFileClick () {
++        const input = document.createElement('input');
++        input.type = 'file';
++        input.accept = '.js';
++        input.onchange = async e => {
++            const file = e.target.files[0];
++            if (file) {
++                try {
++                    const dataURL = await readAsDataURL(file);
++                    this.setState({
++                        extensionURL: dataURL,
++                        extensionFileName: file.name
++                    });
++                    // Auto-fill name if empty
++                    if (!this.state.name) {
++                        const baseName = file.name.replace(/\.js$/i, '');
++                        this.setState({name: baseName});
++                    }
++                } catch (err) {
++                    // eslint-disable-next-line no-alert
++                    alert(err);
++                }
++            }
++        };
++        input.click();
++    }
++
++    async handleImageFileClick () {
++        const input = document.createElement('input');
++        input.type = 'file';
++        input.accept = 'image/*';
++        input.onchange = async e => {
++            const file = e.target.files[0];
++            if (file) {
++                try {
++                    const dataURL = await readAsDataURL(file);
++                    this.setState({iconURL: dataURL});
++                } catch (err) {
++                    // eslint-disable-next-line no-alert
++                    alert(err);
++                }
++            }
++        };
++        input.click();
++    }
++
++    canSave () {
++        return !!(this.state.name && this.state.extensionURL);
++    }
++
++    render () {
++        const isEditing = !!this.props.editExtension;
++        return (
++            <Modal
++                className={styles.modalContent}
++                onRequestClose={this.handleClose}
++                contentLabel={isEditing ? '编辑我的扩展' : '添加我的扩展'}
++                id="myExtensionModal"
++            >
++                <Box className={styles.body}>
++                    {/* 打开扩展 - Open extension file */}
++                    <div className={styles.setting}>
++                        <div className={styles.label}>
++                            打开扩展
++                        </div>
++                        <button
++                            className={styles.fileButton}
++                            onClick={this.handleExtensionFileClick}
++                        >
++                            {this.state.extensionFileName ? '重新选择' : '选择扩展文件'}
++                        </button>
++                        {this.state.extensionFileName && (
++                            <div className={styles.fileName}>
++                                {this.state.extensionFileName}
++                            </div>
++                        )}
++                    </div>
++
++                    {/* 编辑扩展名 - Edit extension name */}
++                    <div className={styles.setting}>
++                        <div className={styles.label}>
++                            编辑扩展名
++                        </div>
++                        <input
++                            type="text"
++                            className={styles.settingInput}
++                            value={this.state.name}
++                            onChange={this.handleNameChange}
++                            placeholder="输入扩展名称"
++                        />
++                    </div>
++
++                    {/* 扩展图片 - Extension image */}
++                    <div className={styles.setting}>
++                        <div className={styles.label}>
++                            扩展图片
++                        </div>
++                        {this.state.iconURL && (
++                            <img
++                                src={this.state.iconURL}
++                                alt="扩展图标"
++                                className={styles.imagePreview}
++                            />
++                        )}
++                        <button
++                            className={styles.fileButton}
++                            onClick={this.handleImageFileClick}
++                        >
++                            {this.state.iconURL ? '重新选择图片' : '选择图片'}
++                        </button>
++                    </div>
++
++                    {/* 是否允许不在沙盒内运行 - Whether to allow running without sandbox */}
++                    <div className={styles.setting}>
++                        <label className={styles.checkboxContainer}>
++                            <input
++                                type="checkbox"
++                                className={styles.checkbox}
++                                checked={this.state.unsandboxed}
++                                onChange={this.handleUnsandboxedChange}
++                            />
++                            <span className={styles.label}>
++                                是否允许不在沙盒内运行
++                            </span>
++                        </label>
++                        {this.state.unsandboxed && (
++                            <div className={styles.warning}>
++                                允许扩展脱离沙盒运行是危险的，如果你不知道自己在做什么，请勿启用此选项。
++                            </div>
++                        )}
++                    </div>
++
++                    {/* 自动添加到新项目 - Auto add to new projects */}
++                    <div className={styles.setting}>
++                        <label className={styles.checkboxContainer}>
++                            <input
++                                type="checkbox"
++                                className={styles.checkbox}
++                                checked={this.state.autoAddToNewProjects}
++                                onChange={this.handleAutoAddChange}
++                            />
++                            <span className={styles.label}>
++                                自动添加到新项目
++                            </span>
++                        </label>
++                        {this.state.autoAddToNewProjects && (
++                            <div className={styles.warning}>
++                                勾选后，每新建一个项目都会自动加载此扩展。
++                            </div>
++                        )}
++                    </div>
++
++                    {/* 添加 / 保存 button */}
++                    <div className={styles.buttonRow}>
++                        <button
++                            className={styles.cancelButton}
++                            onClick={this.handleClose}
++                        >
++                            取消
++                        </button>
++                        <button
++                            className={styles.saveButton}
++                            onClick={this.handleSave}
++                            disabled={!this.canSave()}
++                        >
++                            {isEditing ? '保存' : '添加'}
++                        </button>
++                    </div>
++                </Box>
++            </Modal>
++        );
++    }
++}
++
++MyExtensionModal.propTypes = {
++    editExtension: PropTypes.shape({
++        id: PropTypes.string,
++        name: PropTypes.string,
++        extensionURL: PropTypes.string,
++        extensionFileName: PropTypes.string,
++        iconURL: PropTypes.string,
++        unsandboxed: PropTypes.bool,
++        autoAddToNewProjects: PropTypes.bool
++    }),
++    onSave: PropTypes.func.isRequired,
++    onClose: PropTypes.func.isRequired
++};
++
++export default MyExtensionModal;
 diff --git a/node_modules/scratch-gui/src/components/tw-settings-modal/settings-modal.jsx b/node_modules/scratch-gui/src/components/tw-settings-modal/settings-modal.jsx
 index 52b6334..a2ab822 100644
 --- a/node_modules/scratch-gui/src/components/tw-settings-modal/settings-modal.jsx
@@ -232,6 +3057,835 @@ index 52b6334..a2ab822 100644
  };
  
  export default injectIntl(SettingsModalComponent);
+diff --git a/node_modules/scratch-gui/src/containers/costume-tab.jsx b/node_modules/scratch-gui/src/containers/costume-tab.jsx
+index 86a0f10..65c4950 100644
+--- a/node_modules/scratch-gui/src/containers/costume-tab.jsx
++++ b/node_modules/scratch-gui/src/containers/costume-tab.jsx
+@@ -13,6 +13,7 @@ import DragConstants from '../lib/drag-constants';
+ import {emptyCostume} from '../lib/empty-assets';
+ import sharedMessages from '../lib/shared-messages';
+ import downloadBlob from '../lib/download-blob';
++import fetchImageFromUrl from '../lib/tw-fetch-image-from-url';
+ 
+ import {
+     openCostumeLibrary,
+@@ -34,6 +35,8 @@ import paintIcon from '../components/action-menu/icon--paint.svg';
+ import surpriseIcon from '../components/action-menu/icon--surprise.svg';
+ import searchIcon from '../components/action-menu/icon--search.svg';
+ 
++const urlIcon = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
++
+ import {getCostumeLibrary, getBackdropLibrary} from '../lib/libraries/tw-async-libraries';
+ 
+ let messages = defineMessages({
+@@ -66,6 +69,11 @@ let messages = defineMessages({
+         defaultMessage: 'Upload Costume',
+         description: 'Button to add a costume by uploading a file in the editor tab',
+         id: 'gui.costumeTab.addFileCostume'
++    },
++    addCostumeFromUrlMsg: {
++        defaultMessage: 'Add from URL',
++        description: 'Button to add a costume from a URL',
++        id: 'gui.costumeTab.addCostumeFromUrl'
+     }
+ });
+ 
+@@ -85,6 +93,7 @@ class CostumeTab extends React.Component {
+             'handleSurpriseBackdrop',
+             'handleFileUploadClick',
+             'handleCostumeUpload',
++            'handleCostumeFromUrlClick',
+             'handleDrop',
+             'setFileInput'
+         ]);
+@@ -211,6 +220,36 @@ class CostumeTab extends React.Component {
+             }, this.props.onCloseImporting);
+         }, this.props.onCloseImporting);
+     }
++    async handleCostumeFromUrlClick () {
++        const isZh = /^zh/i.test(this.props.intl.locale || '');
++        // window.prompt is replaced by the desktop app with an async implementation
++        const url = await window.prompt(isZh ? '请输入图片URL：' : 'Enter image URL for the costume:');
++        if (!url) return;
++        try {
++            const {bytes, dataFormat} = await fetchImageFromUrl(url);
++
++            const storage = this.props.vm.runtime.storage;
++            const assetType = dataFormat === 'svg' ? storage.AssetType.ImageVector : storage.AssetType.ImageBitmap;
++            const asset = storage.builtinHelper._store(assetType, dataFormat, bytes, null);
++
++            const name = this.props.intl.formatMessage(sharedMessages.costume, {index: 1});
++            const md5ext = asset + '.' + dataFormat;
++            const costume = {
++                name: name,
++                md5: md5ext,
++                assetId: asset,
++                md5ext: md5ext,
++                dataFormat: dataFormat,
++                rotationCenterX: dataFormat === 'svg' ? 240 : 0,
++                rotationCenterY: dataFormat === 'svg' ? 180 : 0,
++                bitmapResolution: dataFormat === 'svg' ? 1 : 2
++            };
++
++            await this.handleNewCostume(costume, false, this.props.vm.editingTarget.id);
++        } catch (e) {
++            window.alert((isZh ? '从URL导入图片失败：' : 'Failed to add costume from URL: ') + e.message);
++        }
++    }
+     handleFileUploadClick () {
+         this.fileInput.click();
+     }
+@@ -304,6 +343,11 @@ class CostumeTab extends React.Component {
+                         title: intl.formatMessage(addLibraryMessage),
+                         img: searchIcon,
+                         onClick: addLibraryFunc
++                    },
++                    {
++                        title: intl.formatMessage(messages.addCostumeFromUrlMsg),
++                        img: urlIcon,
++                        onClick: this.handleCostumeFromUrlClick
+                     }
+                 ]}
+                 dragType={DragConstants.COSTUME}
+diff --git a/node_modules/scratch-gui/src/containers/extension-library.css b/node_modules/scratch-gui/src/containers/extension-library.css
+new file mode 100644
+index 0000000..fd43e45
+--- /dev/null
++++ b/node_modules/scratch-gui/src/containers/extension-library.css
+@@ -0,0 +1,40 @@
++@import "../css/colors.css";
++
++.context-menu {
++    position: fixed;
++    z-index: 10000;
++    background: $ui-white;
++    border: 1px solid $ui-black-transparent;
++    border-radius: 12px;
++    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
++    padding: 6px;
++    display: flex;
++    flex-direction: column;
++    gap: 4px;
++    min-width: 120px;
++}
++
++.context-menu-button {
++    padding: 8px 16px;
++    border: none;
++    background: none;
++    cursor: pointer;
++    border-radius: 8px;
++    font-size: 14px;
++    text-align: left;
++    font-family: inherit;
++    color: $text-primary;
++    font-weight: 500;
++    transition: background 0.15s ease, color 0.15s ease;
++    white-space: nowrap;
++}
++
++.context-menu-button:hover {
++    background: $looks-secondary;
++    color: white;
++}
++
++.context-menu-button-danger:hover {
++    background: $error-primary;
++    color: white;
++}
+diff --git a/node_modules/scratch-gui/src/containers/extension-library.jsx b/node_modules/scratch-gui/src/containers/extension-library.jsx
+index 99f170d..ffa2bfa 100644
+--- a/node_modules/scratch-gui/src/containers/extension-library.jsx
++++ b/node_modules/scratch-gui/src/containers/extension-library.jsx
+@@ -12,8 +12,31 @@ import extensionLibraryContent, {
+ } from '../lib/libraries/extensions/index.jsx';
+ import extensionTags from '../lib/libraries/tw-extension-tags';
+ 
++import {
++    getMyExtensions,
++    addMyExtension,
++    updateMyExtension,
++    removeMyExtension,
++    getMyExtensionById,
++    getPinnedExtensions,
++    isPinned,
++    togglePin,
++    onMyExtensionsChange,
++    onPinnedChange,
++    generateId
++} from '../lib/tw-my-extensions';
++import {manuallyTrustExtension} from './tw-security-manager.jsx';
++
++// NeoWarp: 本地 Expands 扩展（NeoWarp 标签）
++import fetchNeowarpExtensions from '../lib/tw-neowarp-extensions';
++
+ import LibraryComponent from '../components/library/library.jsx';
++import MyExtensionModal from '../components/tw-my-extension-modal/my-extension-modal.jsx';
+ import extensionIcon from '../components/action-menu/icon--sprite.svg';
++import styles from './extension-library.css';
++
++// Plus icon for the "add my extension" card (2:1 aspect ratio SVG)
++const addCardIcon = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100"%3E%3Crect width="200" height="100" fill="%23e8edf1"/%3E%3Ccircle cx="100" cy="50" r="25" fill="%234c97ff"/%3E%3Cpath d="M95 35h10v30h-10z" fill="white"/%3E%3Cpath d="M85 45h30v10h-30z" fill="white"/%3E%3C/svg%3E';
+ 
+ const messages = defineMessages({
+     extensionTitle: {
+@@ -88,12 +111,28 @@ class ExtensionLibrary extends React.PureComponent {
+     constructor (props) {
+         super(props);
+         bindAll(this, [
+-            'handleItemSelect'
++            'handleItemSelect',
++            'handleItemContextMenu',
++            'handleCloseContextMenu',
++            'handlePin',
++            'handleDelete',
++            'handleEdit',
++            'handleEditCode',
++            'handleOpenAddModal',
++            'handleCloseModal',
++            'handleSaveExtension',
++            'handleContextMenuRef'
+         ]);
+         this.state = {
+             gallery: cachedGallery,
+             galleryError: null,
+-            galleryTimedOut: false
++            galleryTimedOut: false,
++            myExtensions: getMyExtensions(),
++            pinnedKeys: getPinnedExtensions(),
++            // NeoWarp: 本地 Expands 扩展（NeoWarp 标签）
++            neowarpExtensions: [],
++            contextMenu: null,
++            modalState: null
+         };
+     }
+     componentDidMount () {
+@@ -120,6 +159,25 @@ class ExtensionLibrary extends React.PureComponent {
+                     clearTimeout(timeout);
+                 });
+         }
++        // NeoWarp: 扫描本地 Expands 目录
++        fetchNeowarpExtensions()
++            .then(neowarpExtensions => {
++                if (neowarpExtensions.length) {
++                    this.setState({neowarpExtensions});
++                }
++            });
++        this.unsubscribeMy = onMyExtensionsChange(() => {
++            this.setState({myExtensions: getMyExtensions()});
++        });
++        this.unsubscribePinned = onPinnedChange(() => {
++            this.setState({pinnedKeys: getPinnedExtensions()});
++        });
++        document.addEventListener('click', this.handleCloseContextMenu);
++    }
++    componentWillUnmount () {
++        if (this.unsubscribeMy) this.unsubscribeMy();
++        if (this.unsubscribePinned) this.unsubscribePinned();
++        document.removeEventListener('click', this.handleCloseContextMenu);
+     }
+     handleItemSelect (item) {
+         if (item.href) {
+@@ -128,6 +186,11 @@ class ExtensionLibrary extends React.PureComponent {
+ 
+         const extensionId = item.extensionId;
+ 
++        if (extensionId === 'add_my_extension') {
++            this.handleOpenAddModal();
++            return;
++        }
++
+         if (extensionId === 'custom_extension') {
+             this.props.onOpenCustomExtensionModal();
+             return;
+@@ -144,6 +207,10 @@ class ExtensionLibrary extends React.PureComponent {
+             if (this.props.vm.extensionManager.isExtensionLoaded(extensionId)) {
+                 this.props.onCategorySelected(extensionId);
+             } else {
++                // If this is a my-extension that's unsandboxed, trust it first
++                if (item.mine && item.unsandboxed) {
++                    manuallyTrustExtension(url);
++                }
+                 this.props.vm.extensionManager.loadExtensionURL(url)
+                     .then(() => {
+                         this.props.onCategorySelected(extensionId);
+@@ -156,10 +223,169 @@ class ExtensionLibrary extends React.PureComponent {
+             }
+         }
+     }
++    handleItemContextMenu (item, event) {
++        // Don't show context menu for the "add" card
++        if (item.extensionId === 'add_my_extension') {
++            return;
++        }
++        this.setState({
++            contextMenu: {
++                x: event.clientX,
++                y: event.clientY,
++                item
++            }
++        });
++    }
++    handleCloseContextMenu () {
++        if (this.state.contextMenu) {
++            this.setState({contextMenu: null});
++        }
++    }
++    handleContextMenuRef (ref) {
++        this.contextMenuRef = ref;
++    }
++    handlePin (item) {
++        togglePin(item.extensionId);
++        this.handleCloseContextMenu();
++    }
++    handleDelete (item) {
++        removeMyExtension(item.extensionId);
++        this.handleCloseContextMenu();
++    }
++    handleEdit (item) {
++        const extension = getMyExtensionById(item.extensionId);
++        this.setState({
++            modalState: {mode: 'edit', extension}
++        });
++        this.handleCloseContextMenu();
++    }
++    // NeoWarp: 右键「编辑」在扩展编辑器中打开扩展代码；名称/图标等元数据用「设置」
++    handleEditCode (item) {
++        this.handleCloseContextMenu();
++        const extension = getMyExtensionById(item.extensionId);
++        if (!extension || !extension.extensionURL) {
++            return;
++        }
++        if (typeof EditorPreload === 'undefined' ||
++            typeof EditorPreload.openExtensionInEditor !== 'function') {
++            // eslint-disable-next-line no-alert
++            alert('Extension editor is not available');
++            return;
++        }
++        EditorPreload.openExtensionInEditor({
++            id: extension.id,
++            name: extension.extensionFileName || `${extension.name}.js`,
++            url: extension.extensionURL
++        }).catch(err => {
++            log.error(err);
++            // eslint-disable-next-line no-alert
++            alert(err);
++        });
++    }
++    handleOpenAddModal () {
++        this.setState({
++            modalState: {mode: 'add', extension: null}
++        });
++    }
++    handleCloseModal () {
++        this.setState({modalState: null});
++    }
++    handleSaveExtension (data) {
++        if (this.state.modalState.mode === 'edit' && this.state.modalState.extension) {
++            updateMyExtension(this.state.modalState.extension.id, data);
++        } else {
++            const id = generateId();
++            addMyExtension({id, ...data});
++        }
++        this.handleCloseModal();
++    }
++    buildMyExtensionItems () {
++        return this.state.myExtensions.map(ext => ({
++            name: ext.name,
++            extensionId: ext.id,
++            iconURL: ext.iconURL || extensionIcon,
++            extensionURL: ext.extensionURL,
++            tags: ['mine'],
++            featured: true,
++            mine: true,
++            unsandboxed: ext.unsandboxed
++        }));
++    }
++    buildAddCard () {
++        return {
++            name: '添加我的扩展',
++            extensionId: 'add_my_extension',
++            iconURL: addCardIcon,
++            tags: ['mine'],
++            featured: true,
++            mine: true,
++            keepOpenOnSelect: true
++        };
++    }
++    renderContextMenu () {
++        if (!this.state.contextMenu) return null;
++        const {x, y, item} = this.state.contextMenu;
++        const isMine = item.mine;
++        const pinned = isPinned(item.extensionId);
++        // Clamp position to keep menu on screen
++        const left = Math.min(x, window.innerWidth - 180);
++        const top = Math.min(y, window.innerHeight - 200);
++        return (
++            <div
++                ref={this.handleContextMenuRef}
++                className={styles.contextMenu}
++                style={{left, top}}
++                onClick={e => e.stopPropagation()}
++                onContextMenu={e => { e.preventDefault(); e.stopPropagation(); }}
++            >
++                {isMine && (
++                    <React.Fragment>
++                        <button
++                            className={styles.contextMenuButton}
++                            onClick={() => this.handleEditCode(item)}
++                        >
++                            编辑
++                        </button>
++                        <button
++                            className={styles.contextMenuButton}
++                            onClick={() => this.handleEdit(item)}
++                        >
++                            设置
++                        </button>
++                        <button
++                            className={`${styles.contextMenuButton} ${styles.contextMenuButtonDanger}`}
++                            onClick={() => this.handleDelete(item)}
++                        >
++                            删除
++                        </button>
++                    </React.Fragment>
++                )}
++                <button
++                    className={styles.contextMenuButton}
++                    onClick={() => this.handlePin(item)}
++                >
++                    {pinned ? '取消置顶' : '置顶'}
++                </button>
++            </div>
++        );
++    }
+     render () {
+         let library = null;
+         if (this.state.gallery || this.state.galleryError || this.state.galleryTimedOut) {
+-            library = extensionLibraryContent.map(toLibraryItem);
++            // NeoWarp: 本地 Expands 扩展排在最前（NeoWarp 标签）
++            const neowarpItems = this.state.neowarpExtensions.map(toLibraryItem);
++            library = [
++                ...neowarpItems,
++                ...extensionLibraryContent.map(toLibraryItem)
++            ];
++            library.push('---');
++
++            // Add "我的扩展" section: add card + my extensions
++            const myItems = this.buildMyExtensionItems().map(toLibraryItem);
++            const addCard = toLibraryItem(this.buildAddCard());
++            library.push(addCard);
++            library.push(...myItems);
++
+             library.push('---');
+             if (this.state.gallery) {
+                 library.push(toLibraryItem(galleryMore));
+@@ -178,17 +404,29 @@ class ExtensionLibrary extends React.PureComponent {
+         }
+ 
+         return (
+-            <LibraryComponent
+-                data={library}
+-                filterable
+-                persistableKey="extensionId"
+-                id="extensionLibrary"
+-                tags={extensionTags}
+-                title={this.props.intl.formatMessage(messages.extensionTitle)}
+-                visible={this.props.visible}
+-                onItemSelected={this.handleItemSelect}
+-                onRequestClose={this.props.onRequestClose}
+-            />
++            <React.Fragment>
++                <LibraryComponent
++                    data={library}
++                    filterable
++                    persistableKey="extensionId"
++                    id="extensionLibrary"
++                    tags={extensionTags}
++                    title={this.props.intl.formatMessage(messages.extensionTitle)}
++                    visible={this.props.visible}
++                    onItemSelected={this.handleItemSelect}
++                    onRequestClose={this.props.onRequestClose}
++                    onItemContextMenu={this.handleItemContextMenu}
++                    pinnedKeys={this.state.pinnedKeys}
++                />
++                {this.renderContextMenu()}
++                {this.state.modalState && (
++                    <MyExtensionModal
++                        editExtension={this.state.modalState.extension}
++                        onSave={this.handleSaveExtension}
++                        onClose={this.handleCloseModal}
++                    />
++                )}
++            </React.Fragment>
+         );
+     }
+ }
+diff --git a/node_modules/scratch-gui/src/containers/library-item.jsx b/node_modules/scratch-gui/src/containers/library-item.jsx
+index 65ad50d..cb1d77c 100644
+--- a/node_modules/scratch-gui/src/containers/library-item.jsx
++++ b/node_modules/scratch-gui/src/containers/library-item.jsx
+@@ -20,6 +20,7 @@ class LibraryItem extends React.PureComponent {
+         bindAll(this, [
+             'handleBlur',
+             'handleClick',
++            'handleContextMenu',
+             'handleFavorite',
+             'handleFocus',
+             'handleKeyPress',
+@@ -71,6 +72,13 @@ class LibraryItem extends React.PureComponent {
+         e.stopPropagation();
+         this.props.onFavorite(this.props.id);
+     }
++    handleContextMenu (e) {
++        if (this.props.onContextMenu) {
++            e.preventDefault();
++            e.stopPropagation();
++            this.props.onContextMenu(this.props.id, e);
++        }
++    }
+     handleFocus (id) {
+         if (!this.props.showPlayButton) {
+             this.handleMouseEnter(id);
+@@ -166,6 +174,7 @@ class LibraryItem extends React.PureComponent {
+                 showPlayButton={this.props.showPlayButton}
+                 onBlur={this.handleBlur}
+                 onClick={this.handleClick}
++                onContextMenu={this.props.onContextMenu ? this.handleContextMenu : null}
+                 onFocus={this.handleFocus}
+                 onKeyPress={this.handleKeyPress}
+                 onMouseEnter={this.handleMouseEnter}
+@@ -218,6 +227,7 @@ LibraryItem.propTypes = {
+     })),
+     favorite: PropTypes.bool,
+     onFavorite: PropTypes.func,
++    onContextMenu: PropTypes.func,
+     onMouseEnter: PropTypes.func.isRequired,
+     onMouseLeave: PropTypes.func.isRequired,
+     onSelect: PropTypes.func.isRequired,
+diff --git a/node_modules/scratch-gui/src/containers/menu.jsx b/node_modules/scratch-gui/src/containers/menu.jsx
+index 6500fa8..c8673b4 100644
+--- a/node_modules/scratch-gui/src/containers/menu.jsx
++++ b/node_modules/scratch-gui/src/containers/menu.jsx
+@@ -1,15 +1,79 @@
++import bindAll from 'lodash.bindall';
+ import PropTypes from 'prop-types';
+ import React from 'react';
+ 
+ import MenuComponent from '../components/menu/menu.jsx';
++import menuStyles from '../components/menu/menu.css';
+ 
+-const Menu = ({open, children, ...props}) => (
+-    open ? (
+-        <MenuComponent {...props}>
+-            {children}
+-        </MenuComponent>
+-    ) : null
+-);
++/**
++ * NeoWarp: keep the menu mounted for a short moment after `open` turns false
++ * so the fade/out CSS animation can play. CLOSE_DELAY_MS must be >= the
++ * duration of the `menu-out` keyframes in components/menu/menu.css.
++ */
++const CLOSE_DELAY_MS = 200;
++
++class Menu extends React.PureComponent {
++    constructor (props) {
++        super(props);
++        this.state = {
++            render: props.open || false,
++            closing: false,
++            // bumped to remount the <ul> and replay the enter animation when
++            // reopening a menu that was still animating out
++            openCount: 0
++        };
++        bindAll(this, ['finishClose']);
++        this.closeTimeout = null;
++    }
++    componentDidUpdate (prevProps) {
++        if (this.props.open === prevProps.open) return;
++        if (this.props.open) {
++            // opened (maybe interrupting a closing animation)
++            if (this.closeTimeout) {
++                clearTimeout(this.closeTimeout);
++                this.closeTimeout = null;
++            }
++            if (!this.state.render) {
++                // eslint-disable-next-line react/no-did-update-set-state
++                this.setState({render: true, closing: false});
++            } else if (this.state.closing) {
++                // eslint-disable-next-line react/no-did-update-set-state
++                this.setState({
++                    closing: false,
++                    openCount: this.state.openCount + 1
++                });
++            }
++        } else if (this.state.render && !this.state.closing) {
++            // begin closing: stay mounted while the exit animation plays
++            this.setState({closing: true}, () => {
++                this.closeTimeout = setTimeout(this.finishClose, CLOSE_DELAY_MS);
++            });
++        }
++    }
++    componentWillUnmount () {
++        if (this.closeTimeout) {
++            clearTimeout(this.closeTimeout);
++            this.closeTimeout = null;
++        }
++    }
++    finishClose () {
++        this.closeTimeout = null;
++        this.setState({render: false, closing: false});
++    }
++    render () {
++        if (!this.state.render) return null;
++        const {open, children, ...passThrough} = this.props;
++        return (
++            <MenuComponent
++                {...passThrough}
++                key={this.state.openCount}
++                className={this.state.closing ? menuStyles.closing : undefined}
++            >
++                {children}
++            </MenuComponent>
++        );
++    }
++}
+ 
+ Menu.propTypes = {
+     children: PropTypes.node,
+diff --git a/node_modules/scratch-gui/src/containers/sb3-downloader.jsx b/node_modules/scratch-gui/src/containers/sb3-downloader.jsx
+index 9136001..e7f426e 100644
+--- a/node_modules/scratch-gui/src/containers/sb3-downloader.jsx
++++ b/node_modules/scratch-gui/src/containers/sb3-downloader.jsx
+@@ -14,8 +14,8 @@ import log from '../lib/log';
+ const getProjectTitleFromFilename = fileInputFilename => {
+     if (!fileInputFilename) return '';
+     // only parse title with valid scratch project extensions
+-    // (.sb, .sb2, and .sb3)
+-    const matches = fileInputFilename.match(/^(.*)\.sb[23]?$/);
++    // (.sb, .sb2, .sb3, .np1, .npnp, .viewsb3)
++    const matches = fileInputFilename.match(/^(.*)\.(?:sb[23]?|np1|npnp|viewsb3)$/);
+     if (!matches) return '';
+     return matches[1].substring(0, 100); // truncate project title to max 100 chars
+ };
+@@ -67,6 +67,7 @@ class SB3Downloader extends React.Component {
+         bindAll(this, [
+             'downloadProject',
+             'saveAsNew',
++            'saveAsViewsb3',
+             'saveToLastFile',
+             'saveToLastFileOrNew'
+         ]);
+@@ -99,11 +100,23 @@ class SB3Downloader extends React.Component {
+             const handle = await this.props.showSaveFilePicker({
+                 suggestedName: this.props.projectFilename,
+                 types: [
++                    {
++                        description: 'NeoWarp Project',
++                        accept: {
++                            'application/octet-stream': '.np1'
++                        }
++                    },
+                     {
+                         description: 'Scratch 3 Project',
+                         accept: {
+                             'application/octet-stream': '.sb3'
+                         }
++                    },
++                    {
++                        description: 'View-only Project',
++                        accept: {
++                            'application/octet-stream': '.viewsb3'
++                        }
+                     }
+                 ],
+                 excludeAcceptAllOption: true
+@@ -125,6 +138,18 @@ class SB3Downloader extends React.Component {
+             this.handleSaveError(e);
+         }
+     }
++    async saveAsViewsb3 () {
++        if (!this.props.canSaveProject || !this.props.onViewsb3Save) {
++            return;
++        }
++        this.startedSaving();
++        try {
++            await this.props.onViewsb3Save();
++            this.finishedSaving();
++        } catch (e) {
++            this.handleSaveError(e);
++        }
++    }
+     saveToLastFileOrNew () {
+         if (this.props.fileHandle) {
+             return this.saveToLastFile();
+@@ -139,10 +164,14 @@ class SB3Downloader extends React.Component {
+         const writable = await handle.createWritable();
+         this.startedSaving();
+ 
++        const isNp1 = handle.name && handle.name.endsWith('.np1');
++
+         await new Promise((resolve, reject) => {
+             // Projects can be very large, so we'll utilize JSZip's stream API to avoid having the
+             // entire sb3 in memory at the same time.
+-            const jszipStream = this.props.saveProjectSb3Stream();
++            const jszipStream = isNp1 ?
++                this.props.saveProjectNp1Stream() :
++                this.props.saveProjectSb3Stream();
+ 
+             const abortController = new AbortController();
+             jszipStream.on('error', error => {
+@@ -255,6 +284,7 @@ class SB3Downloader extends React.Component {
+                 available: true,
+                 name: this.props.fileHandle ? this.props.fileHandle.name : null,
+                 saveAsNew: this.saveAsNew,
++                saveAsViewsb3: this.saveAsViewsb3,
+                 saveToLastFile: this.saveToLastFile,
+                 saveToLastFileOrNew: this.saveToLastFileOrNew,
+                 smartSave: this.saveToLastFileOrNew
+@@ -281,9 +311,12 @@ SB3Downloader.propTypes = {
+         name: PropTypes.string
+     }),
+     onSaveFinished: PropTypes.func,
++    onViewsb3Save: PropTypes.func,
+     projectFilename: PropTypes.string,
+     saveProjectSb3: PropTypes.func,
+     saveProjectSb3Stream: PropTypes.func,
++    saveProjectNp1: PropTypes.func,
++    saveProjectNp1Stream: PropTypes.func,
+     canSaveProject: PropTypes.bool,
+     onSetFileHandle: PropTypes.func,
+     onSetProjectTitle: PropTypes.func,
+@@ -304,6 +337,8 @@ const mapStateToProps = state => ({
+     fileHandle: state.scratchGui.tw.fileHandle,
+     saveProjectSb3: state.scratchGui.vm.saveProjectSb3.bind(state.scratchGui.vm),
+     saveProjectSb3Stream: state.scratchGui.vm.saveProjectSb3Stream.bind(state.scratchGui.vm),
++    saveProjectNp1: state.scratchGui.vm.saveProjectNp1.bind(state.scratchGui.vm),
++    saveProjectNp1Stream: state.scratchGui.vm.saveProjectNp1Stream.bind(state.scratchGui.vm),
+     canSaveProject: getIsShowingProject(state.scratchGui.projectState.loadingState),
+     projectFilename: getProjectFilename(state.scratchGui.projectTitle, projectTitleInitialState)
+ });
+diff --git a/node_modules/scratch-gui/src/containers/stage-header.jsx b/node_modules/scratch-gui/src/containers/stage-header.jsx
+index c23291b..84ae5fd 100644
+--- a/node_modules/scratch-gui/src/containers/stage-header.jsx
++++ b/node_modules/scratch-gui/src/containers/stage-header.jsx
+@@ -30,7 +30,7 @@ class StageHeader extends React.Component {
+         document.removeEventListener('keydown', this.handleKeyPress);
+     }
+     handleKeyPress (event) {
+-        if (event.key === 'Escape' && this.props.isFullScreen) {
++        if (event.key === 'Escape' && this.props.isFullScreen && !this.props.isViewOnly) {
+             this.props.onSetStageUnFullScreen();
+         }
+     }
+@@ -65,6 +65,7 @@ class StageHeader extends React.Component {
+ 
+ StageHeader.propTypes = {
+     isFullScreen: PropTypes.bool.isRequired,
++    isViewOnly: PropTypes.bool,
+     // tw: update when dimensions or isWindowFullScreen changes
+     isWindowFullScreen: PropTypes.bool.isRequired,
+     customStageSize: PropTypes.shape({
+@@ -76,6 +77,7 @@ StageHeader.propTypes = {
+     onSetStageUnFullScreen: PropTypes.func.isRequired,
+     onSetStageFull: PropTypes.func.isRequired,
+     onOpenSettings: PropTypes.func.isRequired,
++    onDetachStage: PropTypes.func.isRequired,
+     // tw: replace showBranding
+     isEmbedded: PropTypes.bool.isRequired,
+     stageSizeMode: PropTypes.oneOf(Object.keys(STAGE_SIZE_MODES)).isRequired,
+@@ -88,6 +90,7 @@ const mapStateToProps = state => ({
+     // tw: replace showBranding
+     isEmbedded: state.scratchGui.mode.isEmbedded,
+     isFullScreen: state.scratchGui.mode.isFullScreen,
++    isViewOnly: state.scratchGui.mode.isViewOnly,
+     // tw: update when dimensions or isWindowFullScreen changes
+     isWindowFullScreen: state.scratchGui.tw.isWindowFullScreen,
+     dimensions: state.scratchGui.tw.dimensions,
+@@ -100,7 +103,12 @@ const mapDispatchToProps = dispatch => ({
+     onSetStageFull: () => dispatch(setStageSize(STAGE_SIZE_MODES.full)),
+     onSetStageFullScreen: () => dispatch(setFullScreen(true)),
+     onSetStageUnFullScreen: () => dispatch(setFullScreen(false)),
+-    onOpenSettings: () => dispatch(openSettingsModal())
++    onOpenSettings: () => dispatch(openSettingsModal()),
++    onDetachStage: () => {
++        if (typeof EditorPreload !== 'undefined' && EditorPreload.detachStage) {
++            EditorPreload.detachStage();
++        }
++    }
+ });
+ 
+ export default connect(
+diff --git a/node_modules/scratch-gui/src/containers/target-pane.jsx b/node_modules/scratch-gui/src/containers/target-pane.jsx
+index 534cccf..074dff4 100644
+--- a/node_modules/scratch-gui/src/containers/target-pane.jsx
++++ b/node_modules/scratch-gui/src/containers/target-pane.jsx
+@@ -22,6 +22,7 @@ import {highlightTarget} from '../reducers/targets';
+ import {fetchSprite, fetchCode} from '../lib/backpack-api';
+ import randomizeSpritePosition from '../lib/randomize-sprite-position';
+ import downloadBlob from '../lib/download-blob';
++import fetchImageFromUrl from '../lib/tw-fetch-image-from-url';
+ import log from '../lib/log';
+ import {placeInViewport} from '../lib/backpack/code-payload.js';
+ 
+@@ -48,6 +49,7 @@ class TargetPane extends React.Component {
+             'handlePaintSpriteClick',
+             'handleFileUploadClick',
+             'handleSpriteUpload',
++            'handleSpriteFromUrlClick',
+             'setFileInput'
+         ]);
+     }
+@@ -157,6 +159,40 @@ class TargetPane extends React.Component {
+             }, this.props.onCloseImporting);
+         }, this.props.onCloseImporting);
+     }
++    async handleSpriteFromUrlClick () {
++        const isZh = /^zh/i.test(this.props.intl.locale || '');
++        // window.prompt is replaced by the desktop app with an async implementation
++        const url = await window.prompt(isZh ? '请输入图片URL（将创建为新角色）：' : 'Enter image URL for the new sprite:');
++        if (!url) return;
++        try {
++            const {bytes, dataFormat} = await fetchImageFromUrl(url);
++
++            const storage = this.props.vm.runtime.storage;
++            const assetType = dataFormat === 'svg' ? storage.AssetType.ImageVector : storage.AssetType.ImageBitmap;
++            const asset = storage.builtinHelper._store(assetType, dataFormat, bytes, null);
++
++            const costume = {
++                name: 'costume1',
++                assetId: asset,
++                md5ext: asset + '.' + dataFormat,
++                dataFormat: dataFormat,
++                rotationCenterX: dataFormat === 'svg' ? 47 : 0,
++                rotationCenterY: dataFormat === 'svg' ? 47 : 0,
++                bitmapResolution: dataFormat === 'svg' ? 1 : 2
++            };
++
++            const formatMessage = this.props.intl.formatMessage;
++            const emptyItem = emptySprite(
++                formatMessage(sharedMessages.sprite, {index: 1}),
++                formatMessage(sharedMessages.pop),
++                formatMessage(sharedMessages.costume, {index: 1})
++            );
++            emptyItem.costumes = [costume];
++            await this.props.vm.addSprite(JSON.stringify(emptyItem));
++        } catch (e) {
++            window.alert((isZh ? '从URL导入角色失败：' : 'Failed to add sprite from URL: ') + e.message);
++        }
++    }
+     setFileInput (input) {
+         this.fileInput = input;
+     }
+@@ -244,6 +280,7 @@ class TargetPane extends React.Component {
+                 onFileUploadClick={this.handleFileUploadClick}
+                 onPaintSpriteClick={this.handlePaintSpriteClick}
+                 onSelectSprite={this.handleSelectSprite}
++                onSpriteFromUrlClick={this.handleSpriteFromUrlClick}
+                 onSpriteUpload={this.handleSpriteUpload}
+                 onSurpriseSpriteClick={this.handleSurpriseSpriteClick}
+             />
 diff --git a/node_modules/scratch-gui/src/containers/tw-settings-modal.jsx b/node_modules/scratch-gui/src/containers/tw-settings-modal.jsx
 index a7c3bf0..b6798ee 100644
 --- a/node_modules/scratch-gui/src/containers/tw-settings-modal.jsx
@@ -464,61 +4118,473 @@ index a7c3bf0..b6798ee 100644
  });
  
  export default injectIntl(connect(
-diff --git a/node_modules/scratch-gui/src/reducers/tw.js b/node_modules/scratch-gui/src/reducers/tw.js
-index 332709b..8d50008 100644
---- a/node_modules/scratch-gui/src/reducers/tw.js
-+++ b/node_modules/scratch-gui/src/reducers/tw.js
-@@ -17,6 +17,7 @@ const SET_HAS_CLOUD_VARIABLES = 'tw/SET_HAS_CLOUD_VARIABLES';
- const SET_CLOUD_HOST = 'tw/SET_CLOUD_HOST';
- const SET_PLATFORM_MISMATCH_DETAILS = 'tw/SET_PLATFORM_MISMATCH_DETAILS';
- const SET_PROJECT_ERROR = 'tw/SET_PROJECT_ERROR';
-+const SET_UNLIMITED_COSTUME_DRAWING = 'tw/SET_UNLIMITED_COSTUME_DRAWING';
+diff --git a/node_modules/scratch-gui/src/css/typography.css b/node_modules/scratch-gui/src/css/typography.css
+index 348e1df..55c30e2 100644
+--- a/node_modules/scratch-gui/src/css/typography.css
++++ b/node_modules/scratch-gui/src/css/typography.css
+@@ -1,13 +1,14 @@
+ body {
+-    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
++    font-family: 'HarmonyOS Sans SC', "Helvetica Neue", Helvetica, Arial, sans-serif;
+ }
  
- export const initialState = {
-     framerate: 30,
-@@ -52,7 +53,8 @@ export const initialState = {
-         platform: null,
-         callback: null
-     },
--    projectError: null
-+    projectError: null,
-+    unlimitedCostumeDrawing: false
+ h2 {
+     font-size: 1.5rem;
+-    font-weight: bold;
++    font-weight: 700;
+ }
+ 
+ p {
+     font-size: 1rem;
+     line-height: 1.5em;
++    font-weight: 400;
+ }
+diff --git a/node_modules/scratch-gui/src/lib/brand.js b/node_modules/scratch-gui/src/lib/brand.js
+index 8aba8e1..95663d8 100644
+--- a/node_modules/scratch-gui/src/lib/brand.js
++++ b/node_modules/scratch-gui/src/lib/brand.js
+@@ -1,5 +1,5 @@
+ // Legacy export format because this is used by some build-time scripts stuck in the past.
+ // eslint-disable-next-line import/no-commonjs
+ module.exports = {
+-    APP_NAME: 'TurboWarp'
++    APP_NAME: 'NeoWarp'
+ };
+diff --git a/node_modules/scratch-gui/src/lib/libraries/tw-extension-tags.js b/node_modules/scratch-gui/src/lib/libraries/tw-extension-tags.js
+index 8ce6ff5..dddc647 100644
+--- a/node_modules/scratch-gui/src/lib/libraries/tw-extension-tags.js
++++ b/node_modules/scratch-gui/src/lib/libraries/tw-extension-tags.js
+@@ -1,7 +1,7 @@
+-import {APP_NAME} from '../brand';
+-
+ // Because there are all brand names, it is unnecessary for them to be translatable.
+ export default [
+     {tag: 'scratch', intlLabel: 'Scratch'},
+-    {tag: 'tw', intlLabel: APP_NAME}
++    {tag: 'tw', intlLabel: 'TurboWarp'},
++    {tag: 'neowarp', intlLabel: 'NeoWarp'},
++    {tag: 'mine', intlLabel: '我的扩展'}
+ ];
+diff --git a/node_modules/scratch-gui/src/lib/sb-file-uploader-hoc.jsx b/node_modules/scratch-gui/src/lib/sb-file-uploader-hoc.jsx
+index 8b707bd..fcac301 100644
+--- a/node_modules/scratch-gui/src/lib/sb-file-uploader-hoc.jsx
++++ b/node_modules/scratch-gui/src/lib/sb-file-uploader-hoc.jsx
+@@ -6,6 +6,7 @@ import {connect} from 'react-redux';
+ import log from '../lib/log';
+ import sharedMessages from './shared-messages';
+ import {setFileHandle, setProjectError} from '../reducers/tw';
++import {setViewOnly, setFullScreen} from '../reducers/mode';
+ 
+ import {
+     LoadingStates,
+@@ -89,7 +90,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
+                                         // what MIME type they are saved with, so we have to use the most broad MIME
+                                         // type here. Otherwise some users just won't be able to load files for no
+                                         // fault of their own.
+-                                        '*/*': ['.sb', '.sb2', '.sb3']
++                                        '*/*': ['.sb', '.sb2', '.sb3', '.np1', '.npnp', '.viewsb3']
+                                     }
+                                 }
+                             ]
+@@ -112,7 +113,7 @@ const SBFileUploaderHOC = function (WrappedComponent) {
+             } else {
+                 // create <input> element and add it to DOM
+                 this.inputElement = document.createElement('input');
+-                this.inputElement.accept = '.sb,.sb2,.sb3';
++                this.inputElement.accept = '.sb,.sb2,.sb3,.np1,.npnp,.viewsb3';
+                 this.inputElement.style = 'display: none;';
+                 this.inputElement.type = 'file';
+                 this.inputElement.onchange = this.handleChange; // connects to step 3
+@@ -149,13 +150,19 @@ const SBFileUploaderHOC = function (WrappedComponent) {
+                     // Don't update file handle until after confirming replace.
+                     const handle = thisFileInput.handle;
+                     if (handle) {
+-                        if (this.fileToUpload.name.endsWith('.sb3')) {
++                        if (this.fileToUpload.name.endsWith('.sb3') || this.fileToUpload.name.endsWith('.np1') || this.fileToUpload.name.endsWith('.npnp') || this.fileToUpload.name.endsWith('.viewsb3')) {
+                             this.props.onSetFileHandle(handle);
+                         } else {
+                             this.props.onSetFileHandle(null);
+                         }
+                     }
+ 
++                    // Handle .viewsb3 view-only mode
++                    if (this.fileToUpload.name.endsWith('.viewsb3')) {
++                        this.props.onSetViewOnly(true);
++                        this.props.onSetFullScreen(true);
++                    }
++
+                     // cues step 4
+                     this.props.requestProjectUpload(loadingState);
+                 } else {
+@@ -244,6 +251,8 @@ const SBFileUploaderHOC = function (WrappedComponent) {
+                 onLoadingStarted,
+                 onSetFileHandle,
+                 onSetProjectTitle,
++                onSetViewOnly,
++                onSetFullScreen,
+                 projectChanged,
+                 requestProjectUpload: requestProjectUploadProp,
+                 userOwnsProject,
+@@ -327,7 +336,9 @@ const SBFileUploaderHOC = function (WrappedComponent) {
+         // project data. When this is done, the project state transition will be
+         // noticed by componentDidUpdate()
+         requestProjectUpload: loadingState => dispatch(requestProjectUpload(loadingState)),
+-        onSetFileHandle: fileHandle => dispatch(setFileHandle(fileHandle))
++        onSetFileHandle: fileHandle => dispatch(setFileHandle(fileHandle)),
++        onSetViewOnly: isViewOnly => dispatch(setViewOnly(isViewOnly)),
++        onSetFullScreen: isFullScreen => dispatch(setFullScreen(isFullScreen))
+     });
+     // Allow incoming props to override redux-provided props. Used to mock in tests.
+     const mergeProps = (stateProps, dispatchProps, ownProps) => Object.assign(
+diff --git a/node_modules/scratch-gui/src/lib/screen-utils.js b/node_modules/scratch-gui/src/lib/screen-utils.js
+index 5bcd415..ed6834e 100644
+--- a/node_modules/scratch-gui/src/lib/screen-utils.js
++++ b/node_modules/scratch-gui/src/lib/screen-utils.js
+@@ -23,6 +23,10 @@ const STAGE_DIMENSION_DEFAULTS = {
+     fullScreenSpacingBorderAdjustment: 8,
+     // referencing css/units.css,
+     // menuHeightAdjustment = $stage-menu-height
++    // The stage header overlay is position:fixed at top:0 (44px),
++    // and the stage wrapper starts at top:44px. Since the overlay
++    // doesn't take up space inside the wrapper, we only need to
++    // account for the wrapper's top offset (44px).
+     menuHeightAdjustment: 44
  };
  
- const reducer = function (state, action) {
-@@ -140,6 +142,10 @@ const reducer = function (state, action) {
-         return Object.assign({}, state, {
-             projectError: action.projectError
-         });
-+    case SET_UNLIMITED_COSTUME_DRAWING:
-+        return Object.assign({}, state, {
-+            unlimitedCostumeDrawing: action.unlimitedCostumeDrawing
-+        });
-     default:
-         return state;
-     }
-@@ -278,6 +284,13 @@ const setProjectError = function (projectError) {
-     };
- };
+@@ -62,6 +66,8 @@ const getStageDimensions = (stageSize, customStageSize, isFullScreen) => {
  
-+const setUnlimitedCostumeDrawingState = function (unlimitedCostumeDrawing) {
+         stageDimensions.width = stageDimensions.height * (customStageSize.width / customStageSize.height);
+ 
++        // Constrain width to the window width.
++        // This is necessary on 4:3 or 5:4 aspect ratios where height may be the limiting factor.
+         const maxWidth = maxScaleParam ? (
+             Math.min(window.innerWidth, maxScaleParam * customStageSize.width)
+         ) : window.innerWidth;
+diff --git a/node_modules/scratch-gui/src/lib/tw-fetch-image-from-url.js b/node_modules/scratch-gui/src/lib/tw-fetch-image-from-url.js
+new file mode 100644
+index 0000000..48cb377
+--- /dev/null
++++ b/node_modules/scratch-gui/src/lib/tw-fetch-image-from-url.js
+@@ -0,0 +1,90 @@
++/**
++ * Fetch an image from a user-provided URL or local file path and return it
++ * as bytes with the detected Scratch data format (png, jpg, gif, bmp, svg).
++ *
++ * Network images are downloaded through the desktop app's main process when
++ * available (EditorPreload.fetchImage), which bypasses the editor page's
++ * CORS restrictions and Content-Security-Policy, and can also read local
++ * files. URLs without a protocol are assumed to be https. data: URLs are
++ * decoded by the browser itself.
++ *
++ * @param {string} rawUrl URL or file path of the image
++ * @returns {Promise<{bytes: Uint8Array; dataFormat: string}>}
++ */
++export default async function fetchImageFromUrl (rawUrl) {
++    let url = String(rawUrl || '').trim();
++    if (!url) {
++        throw new Error('No URL provided');
++    }
++
++    // Normalize full-width punctuation that Chinese/Japanese input methods
++    // produce (：／．？＃＆＝) and strip all whitespace, neither of which can
++    // appear in a real URL.
++    url = url
++        .replace(/[\u3000\s]+/g, '')
++        .replace(/\uFF1A/g, ':')
++        .replace(/\uFF0F/g, '/')
++        .replace(/\uFF0E/g, '.')
++        .replace(/\uFF1F/g, '?')
++        .replace(/\uFF03/g, '#')
++        .replace(/\uFF06/g, '&')
++        .replace(/\uFF1D/g, '=');
++
++    let bytes;
++    if (/^data:/i.test(url)) {
++        const response = await fetch(url);
++        if (!response.ok) throw new Error(`HTTP ${response.status}`);
++        bytes = new Uint8Array(await response.arrayBuffer());
++    } else {
++        const isFile = /^(?:file:|[a-zA-Z]:[\\/]|\\\\)/i.test(url);
++        if (!isFile) {
++            // "example.com/image.png" should be treated as "https://example.com/image.png",
++            // otherwise fetch() would resolve it against the tw-editor:// page origin.
++            if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(url)) {
++                url = `https://${url}`;
++            }
++            try {
++                // Fail fast with a clear message instead of an opaque error from IPC.
++                // eslint-disable-next-line no-new
++                new URL(url);
++            } catch (e) {
++                throw new Error(`Invalid URL: ${url}`);
++            }
++        }
++        if (typeof EditorPreload !== 'undefined' && EditorPreload.fetchImage) {
++            bytes = new Uint8Array(await EditorPreload.fetchImage(url));
++        } else {
++            const response = await fetch(url);
++            if (!response.ok) throw new Error(`HTTP ${response.status}`);
++            bytes = new Uint8Array(await response.arrayBuffer());
++        }
++    }
++
 +    return {
-+        type: SET_UNLIMITED_COSTUME_DRAWING,
-+        unlimitedCostumeDrawing: unlimitedCostumeDrawing
++        bytes,
++        dataFormat: detectDataFormat(bytes, url)
 +    };
 +};
 +
- export {
-     reducer as default,
-     initialState as twInitialState,
-@@ -299,5 +312,6 @@ export {
-     setHasCloudVariables,
-     setCloudHost,
-     setPlatformMismatchDetails,
--    setProjectError
-+    setProjectError,
-+    setUnlimitedCostumeDrawingState
- };
++/**
++ * Determine the Scratch data format from magic bytes, falling back to the
++ * URL's file extension, defaulting to png.
++ * @param {Uint8Array} bytes image data
++ * @param {string} url URL the data came from
++ * @returns {string} png | jpg | gif | bmp | svg
++ */
++const detectDataFormat = (bytes, url) => {
++    const head = String.fromCharCode.apply(null, bytes.slice(0, 512));
++    if (head.includes('<svg') || /^\s*(<\?xml|<!DOCTYPE)/i.test(head)) {
++        return 'svg';
++    }
++    if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'png';
++    if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'jpg';
++    if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'gif';
++    if (bytes[0] === 0x42 && bytes[1] === 0x4d) return 'bmp';
++    const match = /\.(svg|jpe?g|gif|bmp|png)(?:[?#]|$)/i.exec(url);
++    if (match) {
++        return match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase();
++    }
++    return 'png';
++};
+diff --git a/node_modules/scratch-gui/src/lib/tw-my-extensions.js b/node_modules/scratch-gui/src/lib/tw-my-extensions.js
+new file mode 100644
+index 0000000..1f7ca44
+--- /dev/null
++++ b/node_modules/scratch-gui/src/lib/tw-my-extensions.js
+@@ -0,0 +1,162 @@
++/**
++ * Utility for managing the user's custom "My Extensions" and pinned extensions.
++ * Stored in localStorage.
++ */
++
++const MY_EXTENSIONS_KEY = 'tw:my-extensions';
++const PINNED_EXTENSIONS_KEY = 'tw:pinned-extensions';
++
++let listeners = [];
++let pinnedListeners = [];
++
++const notifyListeners = () => {
++    listeners.forEach(fn => fn());
++};
++
++const notifyPinnedListeners = () => {
++    pinnedListeners.forEach(fn => fn());
++};
++
++/**
++ * @returns {Array} Array of my extension objects:
++ *   { id, name, iconURL, extensionURL, unsandboxed }
++ */
++const getMyExtensions = () => {
++    try {
++        const data = JSON.parse(localStorage.getItem(MY_EXTENSIONS_KEY));
++        if (Array.isArray(data)) return data;
++    } catch (e) {
++        // ignore
++    }
++    return [];
++};
++
++const saveMyExtensions = extensions => {
++    try {
++        localStorage.setItem(MY_EXTENSIONS_KEY, JSON.stringify(extensions));
++        notifyListeners();
++    } catch (e) {
++        // ignore
++    }
++};
++
++const addMyExtension = extension => {
++    const extensions = getMyExtensions();
++    extensions.push(extension);
++    saveMyExtensions(extensions);
++};
++
++const updateMyExtension = (id, updates) => {
++    const extensions = getMyExtensions();
++    const index = extensions.findIndex(ext => ext.id === id);
++    if (index !== -1) {
++        extensions[index] = { ...extensions[index], ...updates };
++        saveMyExtensions(extensions);
++    }
++};
++
++const removeMyExtension = id => {
++    const extensions = getMyExtensions().filter(ext => ext.id !== id);
++    saveMyExtensions(extensions);
++    // Also remove from pinned
++    unpinExtension(id);
++};
++
++const getMyExtensionById = id => {
++    return getMyExtensions().find(ext => ext.id === id);
++};
++
++/**
++ * @returns {Array} Array of my extension objects that should be auto-added to new projects.
++ *   Each item: { id, name, iconURL, extensionURL, unsandboxed, autoAddToNewProjects }
++ */
++const getAutoAddExtensions = () => {
++    return getMyExtensions().filter(ext => ext && ext.autoAddToNewProjects);
++};
++
++// --- Pinned extensions ---
++
++/**
++ * @returns {Array} Array of extension IDs that are pinned to the top.
++ */
++const getPinnedExtensions = () => {
++    try {
++        const data = JSON.parse(localStorage.getItem(PINNED_EXTENSIONS_KEY));
++        if (Array.isArray(data)) return data;
++    } catch (e) {
++        // ignore
++    }
++    return [];
++};
++
++const savePinnedExtensions = pinned => {
++    try {
++        localStorage.setItem(PINNED_EXTENSIONS_KEY, JSON.stringify(pinned));
++        notifyPinnedListeners();
++    } catch (e) {
++        // ignore
++    }
++};
++
++const isPinned = id => getPinnedExtensions().includes(id);
++
++const pinExtension = id => {
++    const pinned = getPinnedExtensions();
++    if (!pinned.includes(id)) {
++        pinned.push(id);
++        savePinnedExtensions(pinned);
++    }
++};
++
++const unpinExtension = id => {
++    const pinned = getPinnedExtensions().filter(p => p !== id);
++    savePinnedExtensions(pinned);
++};
++
++const togglePin = id => {
++    if (isPinned(id)) {
++        unpinExtension(id);
++    } else {
++        pinExtension(id);
++    }
++};
++
++// --- Subscription ---
++
++const onMyExtensionsChange = fn => {
++    listeners.push(fn);
++    return () => {
++        listeners = listeners.filter(f => f !== fn);
++    };
++};
++
++const onPinnedChange = fn => {
++    pinnedListeners.push(fn);
++    return () => {
++        pinnedListeners = pinnedListeners.filter(f => f !== fn);
++    };
++};
++
++/**
++ * Generate a unique ID for a new extension.
++ */
++const generateId = () => {
++    return `my_ext_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
++};
++
++export {
++    getMyExtensions,
++    addMyExtension,
++    updateMyExtension,
++    removeMyExtension,
++    getMyExtensionById,
++    getAutoAddExtensions,
++    getPinnedExtensions,
++    isPinned,
++    pinExtension,
++    unpinExtension,
++    togglePin,
++    onMyExtensionsChange,
++    onPinnedChange,
++    generateId
++};
+diff --git a/node_modules/scratch-gui/src/lib/tw-neowarp-extensions.js b/node_modules/scratch-gui/src/lib/tw-neowarp-extensions.js
+new file mode 100644
+index 0000000..b59306e
+--- /dev/null
++++ b/node_modules/scratch-gui/src/lib/tw-neowarp-extensions.js
+@@ -0,0 +1,55 @@
++/**
++ * NeoWarp: 从本地 Expands 目录读取扩展（扩展库 NeoWarp 标签的数据源）。
++ *
++ * 目录格式（由主进程 src-main/neowarp-expands.js 扫描）：
++ *   Expands/<扩展名>/<作者>/<简介>/*.js
++ *   Expands/<扩展名>/<图片>          → 扩展 Logo（inset 小图标）
++ *   Expands/<扩展名>/<作者>/<图片>    → 扩展大图（featured 卡片背景）
++ *
++ * 元数据与 nw-expands:// 文件 URL 由主进程通过 IPC 提供，
++ * 这里只负责映射为扩展库条目。失败时返回空列表（标签为空但不报错）。
++ */
++
++// NeoWarp: 当扩展既没有背景大图也没有 Logo 时，iconURL 为 null，
++// 直接交给 <img src={null}> 会渲染成浏览器自带的“裂图”占位（看起来像 :( 暂无背景图）。
++// 这里用一个简洁的内联 SVG 占位图兜底，保证卡片始终显示干净的图标而非裂图。
++const NEOWARP_PLACEHOLDER_ICON = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
++    '<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160">' +
++    '<rect width="160" height="160" rx="80" fill="#3a3f4b"/>' +
++    '<g fill="none" stroke="#9aa3b2" stroke-width="6" stroke-linecap="round">' +
++    '<circle cx="80" cy="68" r="26"/>' +
++    '<path d="M40 132 Q80 100 120 132"/>' +
++    '</g></svg>'
++);
++
++const fetchNeowarpExtensions = async () => {
++    if (typeof window === 'undefined' ||
++        !window.EditorPreload ||
++        !window.EditorPreload.getNeowarpExpands) {
++        return [];
++    }
++    let rawItems;
++    try {
++        rawItems = await window.EditorPreload.getNeowarpExpands();
++    } catch (error) {
++        // eslint-disable-next-line no-console
++        console.warn('[neowarp-expands] failed to load local extensions', error);
++        return [];
++    }
++    if (!Array.isArray(rawItems)) return [];
++    return rawItems.map(item => ({
++        name: item.name,
++        extensionId: item.extensionId,
++        extensionURL: item.extensionURL,
++        // featured 卡片大图；无背景图且无 Logo 时回落到内联占位图标，避免裂图
++        iconURL: item.iconURL || NEOWARP_PLACEHOLDER_ICON,
++        // Logo 小图标（无图时为 null，卡片不显示 inset）
++        insetIconURL: item.insetIconURL,
++        description: item.description || '',
++        credits: item.author ? [item.author] : null,
++        tags: ['neowarp'],
++        featured: true
++    }));
++};
++
++export default fetchNeowarpExtensions;
 diff --git a/node_modules/scratch-gui/src/lib/tw-translations/generated-translations.json b/node_modules/scratch-gui/src/lib/tw-translations/generated-translations.json
 index 3d67643..8c3939a 100644
 --- a/node_modules/scratch-gui/src/lib/tw-translations/generated-translations.json
@@ -744,336 +4810,6 @@ index 3d67643..8c3939a 100644
          "tw.spriteSelectorItem.rename": "重新命名",
          "tw.stereo": "雙聲道",
          "tw.studioview.authorAttribution": "作者：{author}",
-diff --git a/node_modules/scratch-gui/src/components/library/library.jsx b/node_modules/scratch-gui/src/components/library/library.jsx
-index 685ccce..36cd157 100644
---- a/node_modules/scratch-gui/src/components/library/library.jsx
-+++ b/node_modules/scratch-gui/src/components/library/library.jsx
-@@ -45,6 +45,7 @@ class LibraryComponent extends React.Component {
-             'handleSelect',
-             'handleFavorite',
-             'handleTagClick',
-+            'handleContextMenu',
-             'setFilteredDataRef'
-         ]);
-         const favorites = this.readFavoritesFromStorage();
-@@ -82,8 +83,23 @@ class LibraryComponent extends React.Component {
-         }
-     }
-     handleSelect (id) {
--        this.handleClose();
--        this.props.onItemSelected(this.getFilteredData()[id]);
-+        const item = this.getFilteredData()[id];
-+        // For items that should keep the library open (e.g. "add my extension" card),
-+        // don't close the library so that subsequent modals can be rendered on top.
-+        if (item && item !== '---' && item.keepOpenOnSelect) {
-+            this.props.onItemSelected(item);
-+        } else {
-+            this.handleClose();
-+            this.props.onItemSelected(item);
-+        }
-+    }
-+    handleContextMenu (id, event) {
-+        if (this.props.onItemContextMenu) {
-+            const item = this.getFilteredData()[id];
-+            if (item && item !== '---') {
-+                this.props.onItemContextMenu(item, event);
-+            }
-+        }
-     }
-     readFavoritesFromStorage () {
-         let data;
-@@ -172,6 +188,9 @@ class LibraryComponent extends React.Component {
-         this.setState({filterQuery: ''});
-     }
-     getFilteredData () {
-+        const pinnedSet = this.props.pinnedKeys && this.props.pinnedKeys.length ?
-+            new Set(this.props.pinnedKeys) : null;
-+
-         // When no filtering, favorites get their own section
-         if (this.state.selectedTag === 'all' && !this.state.filterQuery) {
-             const favoriteItems = this.props.data
-@@ -187,9 +206,22 @@ class LibraryComponent extends React.Component {
-                 favoriteItems.push('---');
-             }
- 
-+            let dataItems = this.props.data;
-+            if (pinnedSet) {
-+                const pinnedData = dataItems.filter(dataItem => (
-+                    dataItem !== '---' && pinnedSet.has(dataItem[this.props.persistableKey])
-+                ));
-+                const unpinnedData = dataItems.filter(dataItem => (
-+                    dataItem === '---' || !pinnedSet.has(dataItem[this.props.persistableKey])
-+                ));
-+                if (pinnedData.length) {
-+                    dataItems = [...pinnedData, '---', ...unpinnedData];
-+                }
-+            }
-+
-             return [
-                 ...favoriteItems,
--                ...this.props.data
-+                ...dataItems
-             ];
-         }
- 
-@@ -215,6 +247,17 @@ class LibraryComponent extends React.Component {
-             ));
-         }
- 
-+        if (this.props.pinnedKeys && this.props.pinnedKeys.length) {
-+            const pinnedSetInner = new Set(this.props.pinnedKeys);
-+            const pinnedItems = filteredItems.filter(dataItem => (
-+                dataItem !== '---' && pinnedSetInner.has(dataItem[this.props.persistableKey])
-+            ));
-+            const unpinnedItems = filteredItems.filter(dataItem => (
-+                dataItem === '---' || !pinnedSetInner.has(dataItem[this.props.persistableKey])
-+            ));
-+            filteredItems = pinnedItems.concat(unpinnedItems);
-+        }
-+
-         if (this.state.filterQuery) {
-             filteredItems = filteredItems.filter(dataItem => {
-                 const search = [...dataItem.tags];
-@@ -299,6 +342,7 @@ class LibraryComponent extends React.Component {
-                     </div>
-                 )}
-                 <div
-+                    key={this.state.selectedTag}
-                     className={classNames(styles.libraryScrollGrid, {
-                         [styles.withFilterBar]: this.props.filterable || this.props.tags
-                     })}
-@@ -324,6 +368,7 @@ class LibraryComponent extends React.Component {
-                                 incompatibleWithScratch={dataItem.incompatibleWithScratch}
-                                 favorite={this.state.favorites.includes(dataItem[this.props.persistableKey])}
-                                 onFavorite={this.handleFavorite}
-+                                onContextMenu={this.props.onItemContextMenu ? this.handleContextMenu : null}
-                                 insetIconURL={dataItem.insetIconURL}
-                                 internetConnectionRequired={dataItem.internetConnectionRequired}
-                                 isPlaying={this.state.playingItem === index}
-@@ -388,10 +433,12 @@ LibraryComponent.propTypes = {
-     id: PropTypes.string.isRequired,
-     persistableKey: PropTypes.string,
-     intl: intlShape.isRequired,
-+    onItemContextMenu: PropTypes.func,
-     onItemMouseEnter: PropTypes.func,
-     onItemMouseLeave: PropTypes.func,
-     onItemSelected: PropTypes.func,
-     onRequestClose: PropTypes.func,
-+    pinnedKeys: PropTypes.arrayOf(PropTypes.string),
-     setStopHandler: PropTypes.func,
-     showPlayButton: PropTypes.bool,
-     tags: PropTypes.arrayOf(PropTypes.shape(TagButton.propTypes)),
-diff --git a/node_modules/scratch-gui/src/components/sprite-selector/sprite-selector.jsx b/node_modules/scratch-gui/src/components/sprite-selector/sprite-selector.jsx
-index a3d3c24..406c61e 100644
---- a/node_modules/scratch-gui/src/components/sprite-selector/sprite-selector.jsx
-+++ b/node_modules/scratch-gui/src/components/sprite-selector/sprite-selector.jsx
-@@ -17,6 +17,8 @@ import spriteIcon from '../action-menu/icon--sprite.svg';
- import surpriseIcon from '../action-menu/icon--surprise.svg';
- import searchIcon from '../action-menu/icon--search.svg';
- 
-+const urlIcon = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
-+
- const messages = defineMessages({
-     addSpriteFromLibrary: {
-         id: 'gui.spriteSelector.addSpriteFromLibrary',
-@@ -37,6 +39,11 @@ const messages = defineMessages({
-         id: 'gui.spriteSelector.addSpriteFromFile',
-         description: 'Button to add a sprite in the target pane from file',
-         defaultMessage: 'Upload Sprite'
-+    },
-+    addSpriteFromUrl: {
-+        id: 'gui.spriteSelector.addSpriteFromUrl',
-+        description: 'Button to add a sprite from URL',
-+        defaultMessage: 'Add Sprite from URL'
-     }
- });
- 
-@@ -60,6 +67,7 @@ const SpriteSelectorComponent = function (props) {
-         onNewSpriteClick,
-         onPaintSpriteClick,
-         onSelectSprite,
-+        onSpriteFromUrlClick,
-         onSpriteUpload,
-         onSurpriseSpriteClick,
-         raised,
-@@ -136,6 +144,10 @@ const SpriteSelectorComponent = function (props) {
-                         title: intl.formatMessage(messages.addSpriteFromLibrary),
-                         img: searchIcon,
-                         onClick: onNewSpriteClick
-+                    }, {
-+                        title: intl.formatMessage(messages.addSpriteFromUrl),
-+                        img: urlIcon,
-+                        onClick: onSpriteFromUrlClick
-                     }
-                 ]}
-                 title={intl.formatMessage(messages.addSpriteFromLibrary)}
-@@ -168,6 +180,7 @@ SpriteSelectorComponent.propTypes = {
-     onNewSpriteClick: PropTypes.func,
-     onPaintSpriteClick: PropTypes.func,
-     onSelectSprite: PropTypes.func,
-+    onSpriteFromUrlClick: PropTypes.func,
-     onSpriteUpload: PropTypes.func,
-     onSurpriseSpriteClick: PropTypes.func,
-     raised: PropTypes.bool,
-diff --git a/node_modules/scratch-gui/src/containers/costume-tab.jsx b/node_modules/scratch-gui/src/containers/costume-tab.jsx
-index 86a0f10..65c4950 100644
---- a/node_modules/scratch-gui/src/containers/costume-tab.jsx
-+++ b/node_modules/scratch-gui/src/containers/costume-tab.jsx
-@@ -13,6 +13,7 @@ import DragConstants from '../lib/drag-constants';
- import {emptyCostume} from '../lib/empty-assets';
- import sharedMessages from '../lib/shared-messages';
- import downloadBlob from '../lib/download-blob';
-+import fetchImageFromUrl from '../lib/tw-fetch-image-from-url';
- 
- import {
-     openCostumeLibrary,
-@@ -34,6 +35,8 @@ import paintIcon from '../components/action-menu/icon--paint.svg';
- import surpriseIcon from '../components/action-menu/icon--surprise.svg';
- import searchIcon from '../components/action-menu/icon--search.svg';
- 
-+const urlIcon = 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
-+
- import {getCostumeLibrary, getBackdropLibrary} from '../lib/libraries/tw-async-libraries';
- 
- let messages = defineMessages({
-@@ -66,6 +69,11 @@ let messages = defineMessages({
-         defaultMessage: 'Upload Costume',
-         description: 'Button to add a costume by uploading a file in the editor tab',
-         id: 'gui.costumeTab.addFileCostume'
-+    },
-+    addCostumeFromUrlMsg: {
-+        defaultMessage: 'Add from URL',
-+        description: 'Button to add a costume from a URL',
-+        id: 'gui.costumeTab.addCostumeFromUrl'
-     }
- });
- 
-@@ -85,6 +93,7 @@ class CostumeTab extends React.Component {
-             'handleSurpriseBackdrop',
-             'handleFileUploadClick',
-             'handleCostumeUpload',
-+            'handleCostumeFromUrlClick',
-             'handleDrop',
-             'setFileInput'
-         ]);
-@@ -211,6 +220,36 @@ class CostumeTab extends React.Component {
-             }, this.props.onCloseImporting);
-         }, this.props.onCloseImporting);
-     }
-+    async handleCostumeFromUrlClick () {
-+        const isZh = /^zh/i.test(this.props.intl.locale || '');
-+        // window.prompt is replaced by the desktop app with an async implementation
-+        const url = await window.prompt(isZh ? '请输入图片URL：' : 'Enter image URL for the costume:');
-+        if (!url) return;
-+        try {
-+            const {bytes, dataFormat} = await fetchImageFromUrl(url);
-+
-+            const storage = this.props.vm.runtime.storage;
-+            const assetType = dataFormat === 'svg' ? storage.AssetType.ImageVector : storage.AssetType.ImageBitmap;
-+            const asset = storage.builtinHelper._store(assetType, dataFormat, bytes, null);
-+
-+            const name = this.props.intl.formatMessage(sharedMessages.costume, {index: 1});
-+            const md5ext = asset + '.' + dataFormat;
-+            const costume = {
-+                name: name,
-+                md5: md5ext,
-+                assetId: asset,
-+                md5ext: md5ext,
-+                dataFormat: dataFormat,
-+                rotationCenterX: dataFormat === 'svg' ? 240 : 0,
-+                rotationCenterY: dataFormat === 'svg' ? 180 : 0,
-+                bitmapResolution: dataFormat === 'svg' ? 1 : 2
-+            };
-+
-+            await this.handleNewCostume(costume, false, this.props.vm.editingTarget.id);
-+        } catch (e) {
-+            window.alert((isZh ? '从URL导入图片失败：' : 'Failed to add costume from URL: ') + e.message);
-+        }
-+    }
-     handleFileUploadClick () {
-         this.fileInput.click();
-     }
-@@ -304,6 +343,11 @@ class CostumeTab extends React.Component {
-                         title: intl.formatMessage(addLibraryMessage),
-                         img: searchIcon,
-                         onClick: addLibraryFunc
-+                    },
-+                    {
-+                        title: intl.formatMessage(messages.addCostumeFromUrlMsg),
-+                        img: urlIcon,
-+                        onClick: this.handleCostumeFromUrlClick
-                     }
-                 ]}
-                 dragType={DragConstants.COSTUME}
-diff --git a/node_modules/scratch-gui/src/containers/target-pane.jsx b/node_modules/scratch-gui/src/containers/target-pane.jsx
-index 534cccf..074dff4 100644
---- a/node_modules/scratch-gui/src/containers/target-pane.jsx
-+++ b/node_modules/scratch-gui/src/containers/target-pane.jsx
-@@ -22,6 +22,7 @@ import {highlightTarget} from '../reducers/targets';
- import {fetchSprite, fetchCode} from '../lib/backpack-api';
- import randomizeSpritePosition from '../lib/randomize-sprite-position';
- import downloadBlob from '../lib/download-blob';
-+import fetchImageFromUrl from '../lib/tw-fetch-image-from-url';
- import log from '../lib/log';
- import {placeInViewport} from '../lib/backpack/code-payload.js';
- 
-@@ -48,6 +49,7 @@ class TargetPane extends React.Component {
-             'handlePaintSpriteClick',
-             'handleFileUploadClick',
-             'handleSpriteUpload',
-+            'handleSpriteFromUrlClick',
-             'setFileInput'
-         ]);
-     }
-@@ -157,6 +159,40 @@ class TargetPane extends React.Component {
-             }, this.props.onCloseImporting);
-         }, this.props.onCloseImporting);
-     }
-+    async handleSpriteFromUrlClick () {
-+        const isZh = /^zh/i.test(this.props.intl.locale || '');
-+        // window.prompt is replaced by the desktop app with an async implementation
-+        const url = await window.prompt(isZh ? '请输入图片URL（将创建为新角色）：' : 'Enter image URL for the new sprite:');
-+        if (!url) return;
-+        try {
-+            const {bytes, dataFormat} = await fetchImageFromUrl(url);
-+
-+            const storage = this.props.vm.runtime.storage;
-+            const assetType = dataFormat === 'svg' ? storage.AssetType.ImageVector : storage.AssetType.ImageBitmap;
-+            const asset = storage.builtinHelper._store(assetType, dataFormat, bytes, null);
-+
-+            const costume = {
-+                name: 'costume1',
-+                assetId: asset,
-+                md5ext: asset + '.' + dataFormat,
-+                dataFormat: dataFormat,
-+                rotationCenterX: dataFormat === 'svg' ? 47 : 0,
-+                rotationCenterY: dataFormat === 'svg' ? 47 : 0,
-+                bitmapResolution: dataFormat === 'svg' ? 1 : 2
-+            };
-+
-+            const formatMessage = this.props.intl.formatMessage;
-+            const emptyItem = emptySprite(
-+                formatMessage(sharedMessages.sprite, {index: 1}),
-+                formatMessage(sharedMessages.pop),
-+                formatMessage(sharedMessages.costume, {index: 1})
-+            );
-+            emptyItem.costumes = [costume];
-+            await this.props.vm.addSprite(JSON.stringify(emptyItem));
-+        } catch (e) {
-+            window.alert((isZh ? '从URL导入角色失败：' : 'Failed to add sprite from URL: ') + e.message);
-+        }
-+    }
-     setFileInput (input) {
-         this.fileInput = input;
-     }
-@@ -244,6 +280,7 @@ class TargetPane extends React.Component {
-                 onFileUploadClick={this.handleFileUploadClick}
-                 onPaintSpriteClick={this.handlePaintSpriteClick}
-                 onSelectSprite={this.handleSelectSprite}
-+                onSpriteFromUrlClick={this.handleSpriteFromUrlClick}
-                 onSpriteUpload={this.handleSpriteUpload}
-                 onSurpriseSpriteClick={this.handleSurpriseSpriteClick}
-             />
 diff --git a/node_modules/scratch-gui/src/lib/tw-translations/index.js b/node_modules/scratch-gui/src/lib/tw-translations/index.js
 index ac9f8a2..618c79b 100644
 --- a/node_modules/scratch-gui/src/lib/tw-translations/index.js
@@ -1102,103 +4838,6 @@ index ac9f8a2..618c79b 100644
  };
  
  export default addAdditionalTranslations;
-diff --git a/node_modules/scratch-gui/src/lib/tw-fetch-image-from-url.js b/node_modules/scratch-gui/src/lib/tw-fetch-image-from-url.js
-new file mode 100644
-index 0000000..48cb377
---- /dev/null
-+++ b/node_modules/scratch-gui/src/lib/tw-fetch-image-from-url.js
-@@ -0,0 +1,90 @@
-+/**
-+ * Fetch an image from a user-provided URL or local file path and return it
-+ * as bytes with the detected Scratch data format (png, jpg, gif, bmp, svg).
-+ *
-+ * Network images are downloaded through the desktop app's main process when
-+ * available (EditorPreload.fetchImage), which bypasses the editor page's
-+ * CORS restrictions and Content-Security-Policy, and can also read local
-+ * files. URLs without a protocol are assumed to be https. data: URLs are
-+ * decoded by the browser itself.
-+ *
-+ * @param {string} rawUrl URL or file path of the image
-+ * @returns {Promise<{bytes: Uint8Array; dataFormat: string}>}
-+ */
-+export default async function fetchImageFromUrl (rawUrl) {
-+    let url = String(rawUrl || '').trim();
-+    if (!url) {
-+        throw new Error('No URL provided');
-+    }
-+
-+    // Normalize full-width punctuation that Chinese/Japanese input methods
-+    // produce (：／．？＃＆＝) and strip all whitespace, neither of which can
-+    // appear in a real URL.
-+    url = url
-+        .replace(/[\u3000\s]+/g, '')
-+        .replace(/\uFF1A/g, ':')
-+        .replace(/\uFF0F/g, '/')
-+        .replace(/\uFF0E/g, '.')
-+        .replace(/\uFF1F/g, '?')
-+        .replace(/\uFF03/g, '#')
-+        .replace(/\uFF06/g, '&')
-+        .replace(/\uFF1D/g, '=');
-+
-+    let bytes;
-+    if (/^data:/i.test(url)) {
-+        const response = await fetch(url);
-+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-+        bytes = new Uint8Array(await response.arrayBuffer());
-+    } else {
-+        const isFile = /^(?:file:|[a-zA-Z]:[\\/]|\\\\)/i.test(url);
-+        if (!isFile) {
-+            // "example.com/image.png" should be treated as "https://example.com/image.png",
-+            // otherwise fetch() would resolve it against the tw-editor:// page origin.
-+            if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:/.test(url)) {
-+                url = `https://${url}`;
-+            }
-+            try {
-+                // Fail fast with a clear message instead of an opaque error from IPC.
-+                // eslint-disable-next-line no-new
-+                new URL(url);
-+            } catch (e) {
-+                throw new Error(`Invalid URL: ${url}`);
-+            }
-+        }
-+        if (typeof EditorPreload !== 'undefined' && EditorPreload.fetchImage) {
-+            bytes = new Uint8Array(await EditorPreload.fetchImage(url));
-+        } else {
-+            const response = await fetch(url);
-+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-+            bytes = new Uint8Array(await response.arrayBuffer());
-+        }
-+    }
-+
-+    return {
-+        bytes,
-+        dataFormat: detectDataFormat(bytes, url)
-+    };
-+};
-+
-+/**
-+ * Determine the Scratch data format from magic bytes, falling back to the
-+ * URL's file extension, defaulting to png.
-+ * @param {Uint8Array} bytes image data
-+ * @param {string} url URL the data came from
-+ * @returns {string} png | jpg | gif | bmp | svg
-+ */
-+const detectDataFormat = (bytes, url) => {
-+    const head = String.fromCharCode.apply(null, bytes.slice(0, 512));
-+    if (head.includes('<svg') || /^\s*(<\?xml|<!DOCTYPE)/i.test(head)) {
-+        return 'svg';
-+    }
-+    if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'png';
-+    if (bytes[0] === 0xff && bytes[1] === 0xd8) return 'jpg';
-+    if (bytes[0] === 0x47 && bytes[1] === 0x49 && bytes[2] === 0x46) return 'gif';
-+    if (bytes[0] === 0x42 && bytes[1] === 0x4d) return 'bmp';
-+    const match = /\.(svg|jpe?g|gif|bmp|png)(?:[?#]|$)/i.exec(url);
-+    if (match) {
-+        return match[1].toLowerCase() === 'jpeg' ? 'jpg' : match[1].toLowerCase();
-+    }
-+    return 'png';
-+};
-
 diff --git a/node_modules/scratch-gui/src/lib/vm-listener-hoc.jsx b/node_modules/scratch-gui/src/lib/vm-listener-hoc.jsx
 index 6339518..0960271 100644
 --- a/node_modules/scratch-gui/src/lib/vm-listener-hoc.jsx
@@ -1216,3 +4855,135 @@ index 6339518..0960271 100644
              dispatch(setPlatformMismatchDetails(platform, callback));
              dispatch(openUnknownPlatformModal());
          },
+diff --git a/node_modules/scratch-gui/src/reducers/mode.js b/node_modules/scratch-gui/src/reducers/mode.js
+index 8517d3c..a27cd0a 100644
+--- a/node_modules/scratch-gui/src/reducers/mode.js
++++ b/node_modules/scratch-gui/src/reducers/mode.js
+@@ -1,11 +1,13 @@
+ const SET_FULL_SCREEN = 'scratch-gui/mode/SET_FULL_SCREEN';
+ const SET_PLAYER = 'scratch-gui/mode/SET_PLAYER';
++const SET_VIEW_ONLY = 'scratch-gui/mode/SET_VIEW_ONLY';
+ 
+ const initialState = {
+     isEmbedded: false,
+     isFullScreen: false,
+     isPlayerOnly: false,
+-    hasEverEnteredEditor: true
++    hasEverEnteredEditor: true,
++    isViewOnly: false
+ };
+ 
+ const reducer = function (state, action) {
+@@ -20,6 +22,10 @@ const reducer = function (state, action) {
+             isPlayerOnly: action.isPlayerOnly,
+             hasEverEnteredEditor: state.hasEverEnteredEditor || !action.isPlayerOnly
+         });
++    case SET_VIEW_ONLY:
++        return Object.assign({}, state, {
++            isViewOnly: action.isViewOnly
++        });
+     default:
+         return state;
+     }
+@@ -37,10 +43,17 @@ const setPlayer = function (isPlayerOnly) {
+         isPlayerOnly: isPlayerOnly
+     };
+ };
++const setViewOnly = function (isViewOnly) {
++    return {
++        type: SET_VIEW_ONLY,
++        isViewOnly: isViewOnly
++    };
++};
+ 
+ export {
+     reducer as default,
+     initialState as modeInitialState,
+     setFullScreen,
+-    setPlayer
++    setPlayer,
++    setViewOnly
+ };
+diff --git a/node_modules/scratch-gui/src/reducers/tw.js b/node_modules/scratch-gui/src/reducers/tw.js
+index 332709b..8d50008 100644
+--- a/node_modules/scratch-gui/src/reducers/tw.js
++++ b/node_modules/scratch-gui/src/reducers/tw.js
+@@ -17,6 +17,7 @@ const SET_HAS_CLOUD_VARIABLES = 'tw/SET_HAS_CLOUD_VARIABLES';
+ const SET_CLOUD_HOST = 'tw/SET_CLOUD_HOST';
+ const SET_PLATFORM_MISMATCH_DETAILS = 'tw/SET_PLATFORM_MISMATCH_DETAILS';
+ const SET_PROJECT_ERROR = 'tw/SET_PROJECT_ERROR';
++const SET_UNLIMITED_COSTUME_DRAWING = 'tw/SET_UNLIMITED_COSTUME_DRAWING';
+ 
+ export const initialState = {
+     framerate: 30,
+@@ -52,7 +53,8 @@ export const initialState = {
+         platform: null,
+         callback: null
+     },
+-    projectError: null
++    projectError: null,
++    unlimitedCostumeDrawing: false
+ };
+ 
+ const reducer = function (state, action) {
+@@ -140,6 +142,10 @@ const reducer = function (state, action) {
+         return Object.assign({}, state, {
+             projectError: action.projectError
+         });
++    case SET_UNLIMITED_COSTUME_DRAWING:
++        return Object.assign({}, state, {
++            unlimitedCostumeDrawing: action.unlimitedCostumeDrawing
++        });
+     default:
+         return state;
+     }
+@@ -278,6 +284,13 @@ const setProjectError = function (projectError) {
+     };
+ };
+ 
++const setUnlimitedCostumeDrawingState = function (unlimitedCostumeDrawing) {
++    return {
++        type: SET_UNLIMITED_COSTUME_DRAWING,
++        unlimitedCostumeDrawing: unlimitedCostumeDrawing
++    };
++};
++
+ export {
+     reducer as default,
+     initialState as twInitialState,
+@@ -299,5 +312,6 @@ export {
+     setHasCloudVariables,
+     setCloudHost,
+     setPlatformMismatchDetails,
+-    setProjectError
++    setProjectError,
++    setUnlimitedCostumeDrawingState
+ };
+diff --git a/node_modules/scratch-gui/src/components/menu-bar/ai-icon.svg b/node_modules/scratch-gui/src/components/menu-bar/ai-icon.svg
+new file mode 100644
+index 0000000..3842f5f
+--- /dev/null
++++ b/node_modules/scratch-gui/src/components/menu-bar/ai-icon.svg
+@@ -0,0 +1,11 @@
++<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
++  <path d="M15 4V2"/>
++  <path d="M15 16v-2"/>
++  <path d="M8 9h2"/>
++  <path d="M20 9h2"/>
++  <path d="M17.8 11.8 19 13"/>
++  <path d="M15 9h.01"/>
++  <path d="M17.8 6.2 19 5"/>
++  <path d="m3 21 9-9"/>
++  <path d="M12.2 6.2 11 5"/>
++</svg>
+\ No newline at end of file
+diff --git a/node_modules/scratch-gui/src/components/stage-header/icon--detach.svg b/node_modules/scratch-gui/src/components/stage-header/icon--detach.svg
+new file mode 100644
+index 0000000..d4a84b2
+--- /dev/null
++++ b/node_modules/scratch-gui/src/components/stage-header/icon--detach.svg
+@@ -0,0 +1,4 @@
++<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" width="20" height="20">
++  <path fill="#575E75" d="M3 3h8v8H3V3zm1.5 1.5v5h5v-5h-5zM11 9h6v8h-6V9zm1.5 1.5v5h3v-5h-3z"/>
++  <path fill="#575E75" d="M7 7l6-3v3l6-3-6 6v-3l-6 3z"/>
++</svg>

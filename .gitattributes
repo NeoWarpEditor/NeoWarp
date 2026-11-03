@@ -1,0 +1,3 @@
+# Keep patch files byte-stable across platforms: patch-package requires exact
+# hunk counts and pure LF; autocrlf/editor whitespace mangling breaks CI.
+patches/*.patch text eol=lf

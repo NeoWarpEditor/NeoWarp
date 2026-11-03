@@ -10,6 +10,15 @@ const builder = new Builder(mode);
 const build = await builder.build();
 console.log(`Built extensions (mode: ${mode})`);
 
+// patch-package cannot carry binary content, so the new loader logo is excluded
+// from patches/scratch-gui+3.2.37.patch and restored here instead.
+// Logo.png at the repo root is byte-identical to the patched loader logo.
+const loaderLogoPath = pathUtil.join(import.meta.dirname, '../node_modules/scratch-gui/src/components/loader/logo.png');
+if (!fs.existsSync(loaderLogoPath)) {
+  fs.copyFileSync(pathUtil.join(import.meta.dirname, '../Logo.png'), loaderLogoPath);
+  console.log('Restored node_modules/scratch-gui/src/components/loader/logo.png from Logo.png');
+}
+
 const outputDirectory = pathUtil.join(import.meta.dirname, '../dist-extensions/');
 fs.rmSync(outputDirectory, {
   recursive: true,
