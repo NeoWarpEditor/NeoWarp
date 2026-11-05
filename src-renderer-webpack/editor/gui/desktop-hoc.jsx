@@ -706,7 +706,11 @@ const DEFAULT_USERNAME = 'player';
 //   kind: field  下拉/变量字段，值直接写进 block.fields
 //   kind: menu   看着像下拉、实际是带菜单影子块的输入槽（可插入 reporter）
 //   bool: true   布尔（六边形）输入，没有影子块
+//   optionalBody: true  C 形块允许空 body（如单独的 control_stop "all"），不发 empty body 警告
+// argument_reporter_* 是自定义积木的参数报告器：VALUE 是字段（参数名），不是输入槽。
 const OPCODE_SCHEMA = {
+  argument_reporter_boolean: { args: [{ name: 'VALUE', kind: 'field' }] },
+  argument_reporter_string_number: { args: [{ name: 'VALUE', kind: 'field' }] },
   control_all_at_once: { args: [], substack: true },
   control_clear_counter: { args: [] },
   control_create_clone_of: { args: [{ name: 'CLONE_OPTION', kind: 'menu', shadow: 'control_create_clone_of_menu', menuField: 'CLONE_OPTION' }] },
@@ -720,7 +724,7 @@ const OPCODE_SCHEMA = {
   control_repeat: { args: [{ name: 'TIMES', kind: 'input', shadow: 'math_whole_number' }], substack: true },
   control_repeat_until: { args: [{ name: 'CONDITION', kind: 'input', bool: true }], substack: true },
   control_start_as_clone: { args: [] },
-  control_stop: { args: [{ name: 'STOP_OPTION', kind: 'field' }] },
+  control_stop: { args: [{ name: 'STOP_OPTION', kind: 'field' }], substack: true, optionalBody: true },
   control_wait: { args: [{ name: 'DURATION', kind: 'input', shadow: 'math_positive_number' }] },
   control_wait_until: { args: [{ name: 'CONDITION', kind: 'input', bool: true }] },
   control_while: { args: [{ name: 'CONDITION', kind: 'input', bool: true }], substack: true },
@@ -845,6 +849,11 @@ const OPCODE_SCHEMA = {
   sound_volume: { args: [] },
 };
 
+// 值原语（value primitive）：这些 opcode 本质是字面量/变量/列表取值器，只能出现在
+// 参数槽里，不是可独立执行的积木。出现在 DSL 行首会被 validateParsedScript 拒绝；
+// 出现在参数位置（如 (math_number 5)、(data_variable $x)）会被 argToInputValue 折叠成字面量。
+const VALUE_PRIMITIVE_OPCODES = { math_number:1, math_integer:1, math_whole_number:1, math_positive_number:1, math_angle:1, text:1, colour_picker:1, note:1, matrix:1, data_variable:1, data_listcontents:1 };
+
 // Tokenize a string of positional arguments into parsed values.
 // Handles: numbers, double-quoted strings, $variables, @lists, and (opcode args...) nested reporters.
 function tokenizeArgs(argsStr) {
@@ -853,27 +862,39 @@ function tokenizeArgs(argsStr) {
   const n = s.length;
   let i = 0;
   const isWhitespace = (c) => c === ' ' || c === '\t' || c === '\r' || c === '\n';
+  // Read a double-quoted string starting at s[i] === '"'; returns [value, nextIndex].
+  // Escapes: \" \\ \n \r \t. Unknown escapes keep the backslash literally.
+  const readString = (s, i) => {
+    let j = i + 1; // skip opening quote
+    let str = '';
+    while (j < n) {
+      if (s[j] === '\\' && j + 1 < n) {
+        const esc = s[j + 1];
+        if (esc === '"' || esc === '\\') {
+          str += esc; // unescape \" -> " and \\ -> \
+          j += 2;
+          continue;
+        }
+        if (esc === 'n') { str += '\n'; j += 2; continue; }
+        if (esc === 'r') { str += '\r'; j += 2; continue; }
+        if (esc === 't') { str += '\t'; j += 2; continue; }
+      }
+      if (s[j] === '"') break;
+      str += s[j];
+      j++;
+    }
+    if (j >= n) {
+      throw new Error('Unclosed string literal: "' + str + '"');
+    }
+    return [str, j + 1]; // past the closing quote
+  };
   while (i < n) {
     while (i < n && isWhitespace(s[i])) i++;
     if (i >= n) break;
     const ch = s[i];
     if (ch === '"') {
-      i++; // skip opening quote
-      let str = '';
-      while (i < n) {
-        if (s[i] === '\\' && i + 1 < n && (s[i+1] === '"' || s[i+1] === '\\')) {
-          str += s[i+1]; // unescape \" -> " and \\ -> \
-          i += 2;
-          continue;
-        }
-        if (s[i] === '"') break;
-        str += s[i];
-        i++;
-      }
-      if (i >= n) {
-        throw new Error('Unclosed string literal: "' + str + '"');
-      }
-      i++; // skip closing quote
+      let str;
+      [str, i] = readString(s, i);
       args.push(str);
     } else if (ch === '(') {
       i++; // skip opening paren
@@ -918,14 +939,33 @@ function tokenizeArgs(argsStr) {
       args.push({ opcode: subOpcode, args: tokenizeArgs(subArgsStr) });
     } else if (ch === '$') {
       i++; // skip $
-      let name = '';
-      while (i < n && !isWhitespace(s[i])) name += s[i], i++;
-      args.push({ variable: name });
+      if (s[i] === '"') {
+        let name;
+        [name, i] = readString(s, i);
+        args.push({ variable: name });
+      } else {
+        let name = '';
+        while (i < n && !isWhitespace(s[i])) name += s[i], i++;
+        args.push({ variable: name });
+      }
     } else if (ch === '@') {
       i++; // skip @
+      if (s[i] === '"') {
+        let name;
+        [name, i] = readString(s, i);
+        args.push({ list: name });
+      } else {
+        let name = '';
+        while (i < n && !isWhitespace(s[i])) name += s[i], i++;
+        args.push({ list: name });
+      }
+    } else if (ch === '%') {
+      // define 体内的参数引用：%名称 → {argument: 名称}，由 argToInputValue
+      // 折叠成 argument_reporter_* 描述符（类型按最近 define 的参数表翻转）。
+      i++; // skip %
       let name = '';
       while (i < n && !isWhitespace(s[i])) name += s[i], i++;
-      args.push({ list: name });
+      args.push({ argument: name });
     } else {
       // number or bareword: read until whitespace
       let token = '';
@@ -941,7 +981,7 @@ function tokenizeArgs(argsStr) {
 }
 
 // Convert a raw token (from tokenizeArgs) into an input value, applying variable/list/nested-reporter rules.
-function argToInputValue(val) {
+function argToInputValue(val, runtime) {
   if (val && typeof val === 'object') {
     if (val.variable) {
       return { opcode: 'data_variable', fields: { VARIABLE: val.variable } };
@@ -949,16 +989,44 @@ function argToInputValue(val) {
     if (val.list) {
       return { opcode: 'data_listcontents', fields: { LIST: val.list } };
     }
+    if (val.argument !== undefined) {
+      // %参数：默认按字符串/数字报告器产出；类型翻转（bool → argument_reporter_boolean）
+      // 与越界引用报错由 parseScratchDSL 的树遍历（applyArgumentRefs）完成。
+      return { opcode: 'argument_reporter_string_number', fields: { VALUE: val.argument } };
+    }
+    if (val.opcode && VALUE_PRIMITIVE_OPCODES[val.opcode]) {
+      // 值原语出现在参数位置：折叠成字面量（{variable}/{list} 简写、字符串或数字）
+      // 直接返回，走常规 shadow 构建；不能保留 opcode 形态，否则会被
+      // validateParsedScript 当成"值原语不是积木"拒绝，也会展开成残缺积木。
+      const primArgs = Array.isArray(val.args) ? val.args : [];
+      const prim0 = primArgs.length > 0 ? primArgs[0] : undefined;
+      if (val.opcode === 'data_variable') {
+        if (prim0 && typeof prim0 === 'object' && prim0.variable) return prim0;
+        return { variable: prim0 == null ? '' : String(prim0) };
+      }
+      if (val.opcode === 'data_listcontents') {
+        if (prim0 && typeof prim0 === 'object' && prim0.list) return prim0;
+        return { list: prim0 == null ? '' : String(prim0) };
+      }
+      if (val.opcode === 'text' || val.opcode === 'colour_picker' ||
+          val.opcode === 'note' || val.opcode === 'matrix') {
+        return prim0 == null ? '' : String(prim0);
+      }
+      // math_*：trim 后可解析为数字则取数字，否则归 0
+      const trimmed = String(prim0 == null ? '' : prim0).trim();
+      const num = Number(trimmed);
+      return trimmed !== '' && !isNaN(num) ? num : 0;
+    }
     if (val.opcode) {
-      return mapArgsToDescriptor(val.opcode, val.args);
+      return mapArgsToDescriptor(val.opcode, val.args, runtime);
     }
   }
   return val; // number or string
 }
 
 // Map an opcode + positional raw args to a block descriptor {opcode, inputs, fields}.
-function mapArgsToDescriptor(opcode, rawArgs) {
-  const schema = OPCODE_SCHEMA[opcode];
+function mapArgsToDescriptor(opcode, rawArgs, runtime) {
+  const schema = resolveBlockSchema(opcode, runtime);
   const inputs = {};
   const fields = {};
   const args = Array.isArray(rawArgs) ? rawArgs : [];
@@ -997,7 +1065,9 @@ function mapArgsToDescriptor(opcode, rawArgs) {
 }
 
 // Parse a single DSL line (already trimmed) into {opcode, args} where args is the raw token array.
-function parseDslLine(content) {
+// runtime 仅用于调用链统一透传（词法解析本身不依赖 schema）。
+function parseDslLine(content, runtime) {
+  void runtime;
   const wsMatch = content.match(/\s/);
   if (wsMatch === null) {
     return { opcode: content, args: [] };
@@ -1008,16 +1078,149 @@ function parseDslLine(content) {
   return { opcode, args: tokenizeArgs(argsStr) };
 }
 
+const isDefineLine = content => content === 'define' || content.indexOf('define ') === 0;
+const isCallLine = content => content === 'call' || content.indexOf('call ') === 0;
+
+// Parse a define hat line: `define walk (steps) <fast> warp=true`.
+// 扫描规则：bareword → proccode 字面词；(名) → 文本参数（%s）；<名> → 布尔参数（%b）；
+// warp=true|false 是标记，不进 proccode。proccode 按出现顺序用单空格连接。
+// 返回树节点形态（与 body 节点同构），解析错误直接抛出（applyDslTextToTarget 统一捕获）。
+function parseDefineLine(content, lineNo) {
+  const rest = content.substring('define'.length);
+  const proccodeParts = [];
+  const argNames = [];
+  const argTypes = [];
+  let warp = false;
+  let i = 0;
+  const n = rest.length;
+  const fail = msg => { throw new Error('line ' + lineNo + ': ' + msg); };
+  while (i < n) {
+    while (i < n && /\s/.test(rest[i])) i++;
+    if (i >= n) break;
+    const ch = rest[i];
+    if (ch === '(' || ch === '<') {
+      const isBool = ch === '<';
+      const close = isBool ? '>' : ')';
+      i++;
+      let name = '';
+      while (i < n && rest[i] !== close) { name += rest[i]; i++; }
+      if (i >= n) fail('define 参数括号未闭合：' + ch + name);
+      i++; // skip close
+      if (name.trim() === '') fail('define 参数名不能为空：' + (isBool ? '<名称>' : '(名称)'));
+      argNames.push(name);
+      argTypes.push(isBool ? 'bool' : 'string');
+      proccodeParts.push(isBool ? '%b' : '%s');
+    } else {
+      let word = '';
+      while (i < n && !/\s/.test(rest[i])) { word += rest[i]; i++; }
+      const warpMatch = word.match(/^warp=(true|false)$/);
+      if (warpMatch) {
+        warp = warpMatch[1] === 'true';
+      } else {
+        proccodeParts.push(word);
+      }
+    }
+  }
+  if (proccodeParts.length === 0) {
+    fail('define 后必须有过程名（例如 define walk (steps) <fast>）');
+  }
+  return {
+    opcode: 'procedures_definition',
+    proc: { proccode: proccodeParts.join(' '), argNames, argTypes, warp },
+    rawArgs: [],
+    indent: 0,
+    substack: [],
+    substack2: [],
+    lineNo
+  };
+}
+
+// Parse a call line: `call "walk %s %b" 10 (operator_gt (sensing_timer) 5)`.
+// call 后第一个 token 必须是加引号的原始 proccode（含 %s/%b 占位符）；
+// 其余 token 按占位符顺序填充参数，原样保留到构建阶段再解析。
+function parseCallLine(content, lineNo) {
+  const rest = content.substring('call'.length);
+  const firstChar = rest.match(/\S/);
+  if (!firstChar || firstChar[0] !== '"') {
+    throw new Error('line ' + lineNo + ': call 后第一个参数必须是加引号的 proccode（例如 call "walk %s" 10）');
+  }
+  const tokens = tokenizeArgs(rest);
+  if (tokens.length === 0 || typeof tokens[0] !== 'string') {
+    throw new Error('line ' + lineNo + ': call 后第一个参数必须是加引号的 proccode（例如 call "walk %s" 10）');
+  }
+  return {
+    opcode: 'procedures_call',
+    proccode: tokens[0],
+    callArgs: tokens.slice(1),
+    rawArgs: [],
+    indent: 0,
+    substack: [],
+    substack2: [],
+    lineNo
+  };
+}
+
 // Convert a tree node (with rawArgs and child node arrays) into a block descriptor with substack/substack2.
-function convertNode(node) {
-  const descriptor = mapArgsToDescriptor(node.opcode, node.rawArgs);
+function convertNode(node, runtime) {
+  let descriptor;
+  if (node.opcode === 'procedures_definition') {
+    descriptor = { opcode: node.opcode, inputs: {}, fields: {}, proc: node.proc };
+  } else if (node.opcode === 'procedures_call') {
+    // callArgs 原样保留（原始 token），procedures_call 的输入在构建阶段按注册表解析
+    descriptor = { opcode: node.opcode, inputs: {}, fields: {}, proccode: node.proccode, callArgs: node.callArgs };
+  } else {
+    descriptor = mapArgsToDescriptor(node.opcode, node.rawArgs, runtime);
+  }
+  if (node.lineNo !== undefined) descriptor.lineNo = node.lineNo;
   if (node.substack && node.substack.length > 0) {
-    descriptor.substack = node.substack.map(convertNode);
+    descriptor.substack = node.substack.map(child => convertNode(child, runtime));
   }
   if (node.substack2 && node.substack2.length > 0) {
-    descriptor.substack2 = node.substack2.map(convertNode);
+    descriptor.substack2 = node.substack2.map(child => convertNode(child, runtime));
   }
   return descriptor;
+}
+
+// define 参数表 → {参数名: 'string'|'bool'}，供 %参数 类型翻转使用。
+function procParamMap(proc) {
+  const map = {};
+  const names = (proc && proc.argNames) || [];
+  const types = (proc && proc.argTypes) || [];
+  names.forEach((nm, idx) => { map[nm] = types[idx] === 'bool' ? 'bool' : 'string'; });
+  return map;
+}
+
+// 遍历描述符树（含 substack/substack2 与嵌套 reporter 描述符）：把 {argument} 生成的
+// argument_reporter_string_number 按最近 define 的参数类型翻转成 boolean；不在任何
+// define 参数表里的 %引用 记错误（仍保留 string_number 描述符，让构建有据可依）。
+function applyArgumentRefs(desc, procMap, errors) {
+  if (!desc || typeof desc !== 'object' || !desc.opcode) return;
+  let map = procMap;
+  if (desc.opcode === 'procedures_definition') {
+    map = procParamMap(desc.proc);
+  }
+  const lineNo = desc.lineNo;
+  Object.keys(desc.inputs || {}).forEach(key => {
+    const v = desc.inputs[key];
+    if (!v || typeof v !== 'object' || !v.opcode) return;
+    if (v.opcode === 'argument_reporter_string_number' || v.opcode === 'argument_reporter_boolean') {
+      const f = v.fields && v.fields.VALUE;
+      // argToInputValue 产出的是裸字符串（{VALUE: 'steps'}），构建期才展开成字段对象
+      const nm = f && typeof f === 'object' ? f.value : f;
+      if (map && Object.prototype.hasOwnProperty.call(map, nm)) {
+        if (map[nm] === 'bool' && v.opcode !== 'argument_reporter_boolean') {
+          desc.inputs[key] = { opcode: 'argument_reporter_boolean', fields: { VALUE: nm } };
+        }
+      } else {
+        errors.push('line ' + (lineNo === undefined ? '?' : lineNo) + ': %' + nm +
+          ' 不在最近的 define 参数列表中（%参数只能在 define 体内引用）');
+      }
+      return;
+    }
+    applyArgumentRefs(v, map, errors);
+  });
+  (desc.substack || []).forEach(s => applyArgumentRefs(s, map, errors));
+  (desc.substack2 || []).forEach(s => applyArgumentRefs(s, map, errors));
 }
 
 // Convert a JSON block object (e.g. {"opcode":"...","inputs":{},"next":{...}}) to DSL text lines.
@@ -1085,8 +1288,111 @@ const SHADOW_VALUE_FIELD = {
   matrix: 'MATRIX'
 };
 
-function schemaArgFor(opcode, inputName) {
-  const schema = OPCODE_SCHEMA[opcode];
+// 扩展积木动态 schema：OPCODE_SCHEMA 只覆盖核心积木，音乐/翻译等扩展积木的参数
+// 布局要从 runtime._blockInfo（scratch-vm 注册扩展时生成的 scratch-blocks JSON）
+// 现场推导。按 runtime 缓存命中结果（WeakMap<runtime, Map<opcode, schema>>）；
+// 只缓存命中的 opcode——扩展可能稍后加载，未命中的下次必须重查。
+const dynamicSchemaCache = new WeakMap();
+
+// 把 runtime._blockInfo 里的一项块定义（{info, json}）转成与 OPCODE_SCHEMA 同构的
+// schema：args 按 json.args0 的视觉顺序排列，substack/substack2 对齐 C 形分支。
+function buildSchemaFromExtensionEntry(entry, category) {
+  const args0 = Array.isArray(entry.json.args0) ? entry.json.args0 : [];
+  const argInfoMap = (entry.info && entry.info.arguments) || {};
+  const args = [];
+  const schema = { args: args, dynamic: true };
+  for (let i = 0; i < args0.length; i++) {
+    const argJson = args0[i];
+    const name = argJson && argJson.name;
+    const type = argJson && argJson.type;
+    if (!name) continue; // field_image / field_vertical_separator 等图标项没有 name
+    if (type === 'input_value') {
+      const argInfo = argInfoMap[name] || {};
+      const argDef = { name: name, kind: 'input' };
+      if (argInfo.menu && category && category.menuInfo && category.menuInfo[argInfo.menu] &&
+          category.menuInfo[argInfo.menu].acceptReporters) {
+        // 扩展菜单且接受报告器：输入槽 + 菜单影子块，与核心积木的 menu 形态一致
+        // （影子块 id 与 scratch-vm _makeExtensionMenuId 的 `${id}_menu_${name}` 对齐）。
+        argDef.kind = 'menu';
+        argDef.shadow = (category.id || '') + '_menu_' + argInfo.menu;
+        argDef.menuField = argInfo.menu;
+      } else {
+        switch (argInfo.type) {
+          case 'Boolean':
+            argDef.bool = true;
+            break;
+          case 'color':
+            argDef.shadow = 'colour_picker';
+            break;
+          case 'angle':
+            argDef.shadow = 'math_angle';
+            break;
+          case 'number':
+            argDef.shadow = 'math_number';
+            break;
+          default:
+            // 'string'、'note'、'matrix'、缺省都按文本影子处理
+            argDef.shadow = 'text';
+            break;
+        }
+        if (!argInfo.type && argJson.check === 'Boolean') {
+          // info.arguments 缺失时退回 args0 的 check 标记（六边形布尔输入）
+          delete argDef.shadow;
+          argDef.bool = true;
+        }
+      }
+      args.push(argDef);
+    } else if (type === 'input_boolean') {
+      args.push({ name: name, kind: 'input', bool: true });
+    } else if (type === 'input_statement') {
+      if (name === 'SUBSTACK') schema.substack = true;
+      else if (name === 'SUBSTACK2') schema.substack2 = true;
+      // 其它名字的子栈 DSL 无法表示，忽略
+    } else if (type === 'field_dropdown' || type === 'field_number' || type === 'field_angle' ||
+               type === 'field_colour' || type === 'field_text' || type === 'field_checkbox') {
+      // 扩展的下拉/数值等字段直接存值（没有独立菜单块），走 block.fields
+      args.push({ name: name, kind: 'field' });
+    }
+    // field_image / field_variable 等其它类型 → 忽略
+  }
+  return schema;
+}
+
+/**
+ * Resolve a block's parameter schema: OPCODE_SCHEMA for core blocks, or a schema
+ * derived on demand from runtime._blockInfo for loaded extension blocks.
+ * Returns null when the opcode is unknown (no runtime, or extension not loaded).
+ */
+function resolveBlockSchema(opcode, runtime) {
+  if (OPCODE_SCHEMA[opcode]) return OPCODE_SCHEMA[opcode];
+  if (!runtime || !Array.isArray(runtime._blockInfo)) return null;
+  let cache = dynamicSchemaCache.get(runtime);
+  if (cache && cache.has(opcode)) return cache.get(opcode);
+  let derived = null;
+  for (let ci = 0; ci < runtime._blockInfo.length && !derived; ci++) {
+    const category = runtime._blockInfo[ci];
+    const blocks = category && category.blocks;
+    if (!Array.isArray(blocks)) continue;
+    for (let bi = 0; bi < blocks.length; bi++) {
+      const entry = blocks[bi];
+      // 按钮/分隔线等项没有 json；scratch-vm 把 opcode 放在 json.type（容错 json.opcode）
+      if (!entry || !entry.json) continue;
+      if ((entry.json.opcode || entry.json.type) !== opcode) continue;
+      derived = buildSchemaFromExtensionEntry(entry, category);
+      break;
+    }
+  }
+  if (!derived) return null; // 未命中不缓存：扩展可能稍后加载
+  if (!cache) {
+    cache = new Map();
+    dynamicSchemaCache.set(runtime, cache);
+  }
+  cache.set(opcode, derived);
+  return derived;
+}
+
+function schemaArgFor(opcode, inputName, runtime) {
+  const schema = resolveBlockSchema(opcode, runtime);
   if (!schema || !Array.isArray(schema.args)) return null;
   for (let i = 0; i < schema.args.length; i++) {
     if (schema.args[i].name === inputName) return schema.args[i];
@@ -1116,6 +1422,65 @@ function newAiBlockId() {
   return '_ai_' + Math.random().toString(36).substr(2, 9);
 }
 
+// ── 自定义积木（procedures_definition / procedures_call）注册表 ──
+// proccode → {argIds, argNames, argTypes, warp}。call 与 define 之间的参数槽
+// 靠 argumentids 对齐，构建时必须用注册表里的 id，不能两边各自生成。
+
+/**
+ * 扫描 target 现有积木中的 procedures_prototype，解析 mutation 组成注册表。
+ * mutation 里的三个数组字段（argumentids/argumentnames/argumentdefaults）是
+ * JSON 字符串；%s/%b 顺序无法从字段直接得知，用 proccode 中占位符出现顺序与
+ * argumentnames 按下标对齐推导 argTypes。
+ */
+function collectProcRegistry(target) {
+  const registry = new Map();
+  const blocks = target && target.blocks && target.blocks._blocks ? target.blocks._blocks : {};
+  Object.keys(blocks).forEach(id => {
+    const b = blocks[id];
+    if (!b || b.opcode !== 'procedures_prototype' || !b.mutation) return;
+    const proccode = b.mutation.proccode;
+    if (typeof proccode !== 'string') return;
+    let argIds = [];
+    let argNames = [];
+    try { argIds = JSON.parse(b.mutation.argumentids || '[]'); } catch (e) { argIds = []; }
+    try { argNames = JSON.parse(b.mutation.argumentnames || '[]'); } catch (e) { argNames = []; }
+    if (!Array.isArray(argIds)) argIds = [];
+    if (!Array.isArray(argNames)) argNames = [];
+    const placeholders = proccode.match(/%[sb]/g) || [];
+    registry.set(proccode, {
+      argIds,
+      argNames,
+      argTypes: placeholders.map(ph => (ph === '%b' ? 'bool' : 'string')),
+      warp: b.mutation.warp === 'true' || b.mutation.warp === true
+    });
+  });
+  return registry;
+}
+
+/** 把解析得到的文本 define 登记进注册表：每个参数分配一个新 id。 */
+function registerTextDefines(registry, defines) {
+  (defines || []).forEach(proc => {
+    registry.set(proc.proccode, {
+      argIds: (proc.argNames || []).map(() => newAiBlockId()),
+      argNames: proc.argNames || [],
+      argTypes: proc.argTypes || [],
+      warp: !!proc.warp
+    });
+  });
+}
+
+/**
+ * 构建用的注册表：优先 parsed.procRegistry（applyDslTextToTarget 已把文本 define
+ * 合并进去）；否则 fallback 到 VM 现有 define + 本段 parsed.defines——保证 AI 助手
+ * 单脚本路径（parseScratchDSL → validateParsedScript → buildScriptBlocks）可用。
+ */
+function procRegistryForParsed(parsed, target) {
+  if (parsed && parsed.procRegistry) return parsed.procRegistry;
+  const registry = collectProcRegistry(target);
+  registerTextDefines(registry, parsed ? parsed.defines : null);
+  return registry;
+}
+
 /**
  * Create the shadow block occupying one input slot, choosing its type from OPCODE_SCHEMA
  * rather than from the JavaScript type of the value.
@@ -1129,7 +1494,7 @@ function newAiBlockId() {
  * @returns {[object|null, object]} [shadow block to create (or null), input reference]
  */
 function createInputShadow(target, parentId, opcode, inputName, value) {
-  const argDef = schemaArgFor(opcode, inputName);
+  const argDef = schemaArgFor(opcode, inputName, target && target.runtime);
 
   const mkShadow = (shadowOpcode, fields) => {
     const sid = newAiBlockId();
@@ -1148,6 +1513,13 @@ function createInputShadow(target, parentId, opcode, inputName, value) {
   }
   if (value && typeof value === 'object' && value.LIST !== undefined) {
     return mkShadow('data_listcontents', { LIST: resolveVariableField(target, 'LIST', value.LIST) });
+  }
+  // 同上的小写形态：argToInputValue 把嵌套的值原语（如 (data_variable $x)）折叠成的字面量简写
+  if (value && typeof value === 'object' && value.variable !== undefined) {
+    return mkShadow('data_variable', { VARIABLE: resolveVariableField(target, 'VARIABLE', value.variable) });
+  }
+  if (value && typeof value === 'object' && value.list !== undefined) {
+    return mkShadow('data_listcontents', { LIST: resolveVariableField(target, 'LIST', value.list) });
   }
 
   // Boolean (hexagonal) slots hold no shadow in Scratch; an empty condition is legal and
@@ -1198,19 +1570,59 @@ function createInputShadow(target, parentId, opcode, inputName, value) {
  * Turn a block descriptor tree into flat VM block records appended to `allBlocks`.
  * Handles nested reporters, SUBSTACK/SUBSTACK2 (array or single descriptor), `next`
  * chaining, menu/variable/broadcast fields, and parent wiring.
+ * @param {object} procRegistry optional custom-procedure registry (proccode → {argIds,...});
+ *        required when the tree contains procedures_definition / procedures_call
  * @returns {string|null} id of the created block
  */
-function buildBlockStructure(scriptObj, target, allBlocks) {
+function buildBlockStructure(scriptObj, target, allBlocks, procRegistry) {
   if (!scriptObj || !scriptObj.opcode) return null;
   const blockId = newAiBlockId();
   const inputs = {};
   const rawInputs = scriptObj.inputs || {};
 
+  if (scriptObj.opcode === 'procedures_call') {
+    // call 的输入键是 argumentid、带 mutation，构建形态与普通块差异太大，单独走。
+    return buildProcedureCall(scriptObj, target, allBlocks, procRegistry);
+  }
+
+  if (scriptObj.opcode === 'procedures_definition') {
+    // define hat：prototype shadow 挂在 custom_block 输入上（shadow:true, parent=definition），
+    // 参数槽 id 用注册表里的，不得重新生成；身体由 buildScriptBlocks 的 next 链处理。
+    const proc = scriptObj.proc || {};
+    const entry = procRegistry ? procRegistry.get(proc.proccode) : null;
+    if (!entry) return null;
+    const protoId = newAiBlockId();
+    const argDefaults = (entry.argTypes || []).map(t => (t === 'bool' ? 'false' : ''));
+    allBlocks.push({
+      id: protoId,
+      opcode: 'procedures_prototype',
+      inputs: {},
+      fields: {},
+      next: null,
+      parent: blockId,
+      shadow: true,
+      topLevel: false,
+      x: 0,
+      y: 0,
+      // mutation 的三个数组字段是 JSON 字符串；children 必须存在（mutationToXML 会遍历）
+      mutation: {
+        tagName: 'mutation',
+        children: [],
+        proccode: proc.proccode,
+        argumentids: JSON.stringify(entry.argIds || []),
+        argumentnames: JSON.stringify(entry.argNames || []),
+        argumentdefaults: JSON.stringify(argDefaults),
+        warp: entry.warp ? 'true' : 'false'
+      }
+    });
+    inputs.custom_block = { name: 'custom_block', block: protoId, shadow: protoId };
+  }
+
   Object.keys(rawInputs).forEach(key => {
     if (key === 'SUBSTACK' || key === 'SUBSTACK2') return; // handled after the block exists
     const val = rawInputs[key];
     if (val && typeof val === 'object' && val.opcode) {
-      const nestedId = buildBlockStructure(val, target, allBlocks);
+      const nestedId = buildBlockStructure(val, target, allBlocks, procRegistry);
       if (nestedId) {
         inputs[key] = { name: key, block: nestedId, shadow: null };
         const nestedDef = allBlocks.find(ab => ab.id === nestedId);
@@ -1226,7 +1638,7 @@ function buildBlockStructure(scriptObj, target, allBlocks) {
   const fields = {};
   if (scriptObj.fields) {
     Object.keys(scriptObj.fields).forEach(key => {
-      const argDef = schemaArgFor(scriptObj.opcode, key);
+      const argDef = schemaArgFor(scriptObj.opcode, key, target && target.runtime);
       const raw = scriptObj.fields[key];
       // A model may place a menu value under `fields` even though Scratch models it as an
       // input slot; route it through the shadow path so the block still renders correctly.
@@ -1252,18 +1664,18 @@ function buildBlockStructure(scriptObj, target, allBlocks) {
   const subSource = scriptObj.substack || rawInputs.SUBSTACK;
   if (subSource) {
     const arr = Array.isArray(subSource) ? subSource : [subSource];
-    const substackId = buildSubstackChain(arr, target, allBlocks, blockId);
+    const substackId = buildSubstackChain(arr, target, allBlocks, blockId, procRegistry);
     if (substackId) blockDef.inputs.SUBSTACK = { name: 'SUBSTACK', block: substackId, shadow: null };
   }
   const sub2Source = scriptObj.substack2 || rawInputs.SUBSTACK2;
   if (sub2Source) {
     const arr2 = Array.isArray(sub2Source) ? sub2Source : [sub2Source];
-    const substack2Id = buildSubstackChain(arr2, target, allBlocks, blockId);
+    const substack2Id = buildSubstackChain(arr2, target, allBlocks, blockId, procRegistry);
     if (substack2Id) blockDef.inputs.SUBSTACK2 = { name: 'SUBSTACK2', block: substack2Id, shadow: null };
   }
 
   if (scriptObj.next) {
-    const nextId = buildBlockStructure(scriptObj.next, target, allBlocks);
+    const nextId = buildBlockStructure(scriptObj.next, target, allBlocks, procRegistry);
     if (nextId) {
       blockDef.next = nextId;
       const nextDef = allBlocks.find(ab => ab.id === nextId);
@@ -1274,13 +1686,102 @@ function buildBlockStructure(scriptObj, target, allBlocks) {
   return blockId;
 }
 
+/**
+ * Build a procedures_call block: inputs keyed by argumentid（与 prototype 的
+ * argumentids 对齐），mutation 记录 proccode + argumentids。
+ * 参数槽规则：bool 槽接受嵌套报告器（走嵌套构建），裸 true/false 留空；
+ * 其余值走 createInputShadow（数字/字符串 shadow），{variable}/{list} 简写转成
+ * data_variable/data_listcontents 描述符走嵌套（与 argToInputValue 一致）。
+ * 注册表查不到 proccode 时跳过创建（返回 null），校验阶段已报错。
+ * @returns {string|null} id of the created call block
+ */
+function buildProcedureCall(scriptObj, target, allBlocks, procRegistry) {
+  const entry = procRegistry ? procRegistry.get(scriptObj.proccode) : null;
+  if (!entry) return null;
+  const callId = newAiBlockId();
+  const inputs = {};
+  const placeholders = String(scriptObj.proccode).match(/%[sb]/g) || [];
+  const callArgs = Array.isArray(scriptObj.callArgs) ? scriptObj.callArgs : [];
+  const argIds = entry.argIds || [];
+  const argTypes = entry.argTypes || [];
+  for (let i = 0; i < placeholders.length && i < callArgs.length; i++) {
+    const argId = argIds[i];
+    if (!argId) break;
+    let val = callArgs[i];
+    // 原始 token 形态（{variable}/{list} 简写、{opcode, args} 嵌套 token）统一折叠：
+    // 值原语变字面量/简写，其余变描述符——与普通积木参数走 argToInputValue 的规则一致。
+    if (val && typeof val === 'object' && (val.variable !== undefined || val.list !== undefined ||
+        (val.opcode && Array.isArray(val.args)))) {
+      val = argToInputValue(val, target && target.runtime);
+    }
+    if (argTypes[i] === 'bool') {
+      if (val && typeof val === 'object' && val.opcode) {
+        const nestedId = buildBlockStructure(val, target, allBlocks, procRegistry);
+        if (nestedId) {
+          inputs[argId] = { name: argId, block: nestedId, shadow: null };
+          const nestedDef = allBlocks.find(ab => ab.id === nestedId);
+          if (nestedDef) nestedDef.parent = callId;
+        }
+      }
+      // 裸 true/false（或布尔）与折叠后的字面量：布尔槽留空（Scratch 里即 false）
+    } else if (val && typeof val === 'object' && val.opcode) {
+      const nestedId = buildBlockStructure(val, target, allBlocks, procRegistry);
+      if (nestedId) {
+        inputs[argId] = { name: argId, block: nestedId, shadow: null };
+        const nestedDef = allBlocks.find(ab => ab.id === nestedId);
+        if (nestedDef) nestedDef.parent = callId;
+      }
+    } else if (val && typeof val === 'object' && (val.variable !== undefined || val.list !== undefined)) {
+      // 折叠出的 {variable}/{list} 简写：转成 data_variable/data_listcontents 描述符走嵌套
+      const nestedId = buildBlockStructure(argToInputValue(val, target && target.runtime), target, allBlocks, procRegistry);
+      if (nestedId) {
+        inputs[argId] = { name: argId, block: nestedId, shadow: null };
+        const nestedDef = allBlocks.find(ab => ab.id === nestedId);
+        if (nestedDef) nestedDef.parent = callId;
+      }
+    } else {
+      const [shadowBlock, inputRef] = createInputShadow(target, callId, 'procedures_call', argId, val);
+      if (shadowBlock) allBlocks.push(shadowBlock);
+      if (inputRef && inputRef.block) inputs[argId] = inputRef;
+    }
+  }
+  const callBlock = {
+    id: callId,
+    opcode: 'procedures_call',
+    inputs,
+    fields: {},
+    next: null,
+    parent: null,
+    shadow: false,
+    topLevel: false,
+    x: 0,
+    y: 0,
+    mutation: {
+      tagName: 'mutation',
+      children: [],
+      proccode: scriptObj.proccode,
+      argumentids: JSON.stringify(argIds)
+    }
+  };
+  allBlocks.push(callBlock);
+  if (scriptObj.next) {
+    const nextId = buildBlockStructure(scriptObj.next, target, allBlocks, procRegistry);
+    if (nextId) {
+      callBlock.next = nextId;
+      const nextDef = allBlocks.find(ab => ab.id === nextId);
+      if (nextDef) nextDef.parent = callId;
+    }
+  }
+  return callId;
+}
+
 /** Build a vertical chain of blocks; returns the first block's id. */
-function buildSubstackChain(substackArray, target, allBlocks, parentBlockId) {
+function buildSubstackChain(substackArray, target, allBlocks, parentBlockId, procRegistry) {
   if (!Array.isArray(substackArray) || substackArray.length === 0) return null;
   let firstId = null;
   let prevId = null;
   for (let si = 0; si < substackArray.length; si++) {
-    const subId = buildBlockStructure(substackArray[si], target, allBlocks);
+    const subId = buildBlockStructure(substackArray[si], target, allBlocks, procRegistry);
     if (!subId) continue;
     if (firstId === null) firstId = subId;
     const curDef = allBlocks.find(ab => ab.id === subId);
@@ -1433,8 +1934,9 @@ function spliceBlocksIntoScript(target, newBlocks, firstId, lastId, anchor) {
 
 function buildScriptBlocks(parsed, target, options) {
   const opts = options || {};
+  const procRegistry = procRegistryForParsed(parsed, target);
   const allBlocks = [];
-  const hatId = parsed.hat ? buildBlockStructure(parsed.hat, target, allBlocks) : null;
+  const hatId = parsed.hat ? buildBlockStructure(parsed.hat, target, allBlocks, procRegistry) : null;
   if (hatId && opts.topLevel !== false) {
     const hatDef = allBlocks.find(b => b.id === hatId);
     if (hatDef) {
@@ -1445,7 +1947,7 @@ function buildScriptBlocks(parsed, target, options) {
   }
   let prevId = hatId;
   (parsed.blocks || []).forEach(block => {
-    const blockId = buildBlockStructure(block, target, allBlocks);
+    const blockId = buildBlockStructure(block, target, allBlocks, procRegistry);
     if (!blockId) return;
     if (prevId) {
       const prevDef = allBlocks.find(b => b.id === prevId);
@@ -1480,6 +1982,8 @@ function validateParsedScript(parsed, target) {
   const errors = (parsed.errors || []).slice();
   const warnings = [];
   const spriteName = target && target.getName ? target.getName() : '';
+  // 扩展积木动态 schema 的来源；无 target/runtime 时只能覆盖 OPCODE_SCHEMA 核心积木
+  const runtime = target && target.runtime;
 
   const costumeNames = target && target.getCostumes
     ? target.getCostumes().map(c => c.name)
@@ -1491,24 +1995,87 @@ function validateParsedScript(parsed, target) {
     ? target.runtime.targets.filter(t => !t.isStage && t.isOriginal).map(t => t.getName())
     : [];
 
-  const isHat = opcode => opcode.indexOf('event_when') === 0 || opcode === 'control_start_as_clone';
+  const isHat = opcode => opcode.indexOf('event_when') === 0 || opcode === 'control_start_as_clone' ||
+    opcode === 'procedures_definition';
 
   function checkDescriptor(desc, path, depth) {
     if (!desc || !desc.opcode) return;
     const opcode = desc.opcode;
-    const schema = OPCODE_SCHEMA[opcode];
+    const schema = resolveBlockSchema(opcode, runtime);
     const where = path + ' (' + opcode + ')';
 
+    if (opcode === 'procedures_definition' || opcode === 'procedures_call') {
+      // 自定义积木不在 OPCODE_SCHEMA 里，先于 unknown-opcode 检查单独处理。
+      if (opcode === 'procedures_definition') {
+        if (depth > 0) {
+          errors.push(where + ': hat blocks can only be the first line of a script, never nested ' +
+            'inside a body or a C-block. Split this into a separate add_script operation.');
+        }
+        (desc.substack || []).forEach((s, i) => checkDescriptor(s, where + ' body[' + (i + 1) + ']', depth + 1));
+        (desc.substack2 || []).forEach((s, i) => checkDescriptor(s, where + ' else[' + (i + 1) + ']', depth + 1));
+        return;
+      }
+      // procedures_call：注册表查 define，占位符数与 callArgs 数对齐。
+      const registry = procRegistryForParsed(parsed, target);
+      const entry = desc.proccode ? registry.get(desc.proccode) : null;
+      if (!entry) {
+        errors.push(where + ': call 引用的自定义积木 "' + desc.proccode +
+          '" 不存在：本批文本与当前角色中都没有该 define。');
+        return;
+      }
+      const placeholders = String(desc.proccode).match(/%[sb]/g) || [];
+      const callArgs = Array.isArray(desc.callArgs) ? desc.callArgs : [];
+      if (callArgs.length > placeholders.length) {
+        errors.push(where + ': call 参数过多："' + desc.proccode + '" 只有 ' + placeholders.length +
+          ' 个占位符，但提供了 ' + callArgs.length + ' 个参数。');
+      }
+      for (let pi = 0; pi < placeholders.length; pi++) {
+        const ph = placeholders[pi];
+        const val = pi < callArgs.length ? callArgs[pi] : undefined;
+        if (val === undefined || val === null || val === '') {
+          if (ph === '%s') {
+            errors.push(where + ': call 缺少参数：第 ' + (pi + 1) + ' 个占位符 %s 没有对应的实参。');
+          } else {
+            warnings.push(where + ': call 缺少参数：第 ' + (pi + 1) + ' 个占位符 %b 没有对应的实参，布尔槽留空。');
+          }
+          continue;
+        }
+        if (ph === '%b' && (val === true || val === false || val === 'true' || val === 'false')) {
+          warnings.push(where + ': 布尔参数用 true/false 留空处理，建议放括号内布尔报告器');
+        }
+        if (val && typeof val === 'object' && val.opcode) {
+          const converted = argToInputValue(val, runtime);
+          // {variable}/{list} 折叠出的 data_variable/data_listcontents 是值原语形态，
+          // 构建时会成为嵌套变量报告器，不按「值原语不是积木」报错。
+          if (converted && typeof converted === 'object' && converted.opcode &&
+              !VALUE_PRIMITIVE_OPCODES[converted.opcode]) {
+            checkDescriptor(converted, where + ' → ' + ph, depth + 1);
+          }
+        }
+      }
+      (desc.substack || []).forEach((s, i) => checkDescriptor(s, where + ' body[' + (i + 1) + ']', depth + 1));
+      (desc.substack2 || []).forEach((s, i) => checkDescriptor(s, where + ' else[' + (i + 1) + ']', depth + 1));
+      return;
+    }
+
+    if (VALUE_PRIMITIVE_OPCODES[opcode]) {
+      errors.push(where + ': 「' + opcode + '」是值原语（value primitive），不是积木。数值/文本应直接写在参数里（例如 motion_movesteps 10），或放进对应积木的参数槽。');
+      return;
+    }
     if (!schema) {
-      errors.push(where + ': unknown opcode. It is not in the supported block dictionary — ' +
-        'check spelling, or use develop_extension if the block comes from an extension.');
+      if (runtime) {
+        errors.push(where + ': 「' + opcode + '」来自未加载或未知的扩展积木，无法解析其参数。请先在扩展库加载对应扩展后再应用。');
+      } else {
+        errors.push(where + ': unknown opcode. It is not in the supported block dictionary — ' +
+          'check spelling, or use develop_extension if the block comes from an extension.');
+      }
       return;
     }
     if (depth > 0 && isHat(opcode)) {
       errors.push(where + ': hat blocks can only be the first line of a script, never nested ' +
         'inside a body or a C-block. Split this into a separate add_script operation.');
     }
-    if ((schema.substack || schema.substack2) &&
+    if ((schema.substack || schema.substack2) && !schema.optionalBody &&
         (!desc.substack || desc.substack.length === 0) &&
         (!desc.substack2 || desc.substack2.length === 0)) {
       warnings.push(where + ': C-block has an empty body. Indent the blocks that belong inside it by two spaces.');
@@ -1539,7 +2106,12 @@ function validateParsedScript(parsed, target) {
       const raw = (desc.inputs || {})[argDef.name];
       if (raw === undefined || raw === null) return;
       if (typeof raw === 'object' && raw.opcode) {
-        checkDescriptor(raw, where + ' → ' + argDef.name, depth + 1);
+        // $var/@list 简写经 argToInputValue 展开成的 data_variable/data_listcontents
+        // 描述符是合法取值器（序列化端会还原成 $x/@x），与 call 参数路径一致放行；
+        // 其内部没有可再嵌套的输入，无需递归校验。
+        if (!VALUE_PRIMITIVE_OPCODES[raw.opcode]) {
+          checkDescriptor(raw, where + ' → ' + argDef.name, depth + 1);
+        }
         return;
       }
       if (typeof raw === 'object') return; // {VARIABLE}/{LIST} shorthand
@@ -1609,12 +2181,23 @@ function formatValidationError(errors, scriptText) {
  * @param {object} blk block record from target.blocks._blocks
  * @param {object} blocks the whole _blocks map, for following input references
  * @param {number} depth recursion guard for nested reporters
+ * @param {object} [runtime] VM runtime，用于扩展积木的动态 schema 解析
  * @returns {string} one DSL line without indentation
  */
-function serializeBlockToDsl(blk, blocks, depth) {
+function serializeBlockToDsl(blk, blocks, depth, runtime) {
   depth = depth || 0;
   if (!blk || !blk.opcode) return '';
-  const quote = v => '"' + String(v).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+  const escapeDsl = v => String(v)
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t');
+  const quote = v => '"' + escapeDsl(v) + '"';
+  // 变量/列表名：含空白、引号或反斜杠时用带引号形式（$"my var" / @"my list"）
+  const nameToken = (prefix, name) => /[\s"\\]/.test(String(name))
+    ? prefix + '"' + escapeDsl(name) + '"'
+    : prefix + name;
 
   // Value of whatever sits in one input slot, as a DSL token.
   const tokenForInput = (inputName) => {
@@ -1630,8 +2213,8 @@ function serializeBlockToDsl(blk, blocks, depth) {
         if (sub.opcode === 'text' || sub.opcode === 'colour_picker') return quote(raw);
         return String(raw);
       }
-      if (sub.opcode === 'data_variable') return '$' + sub.fields.VARIABLE.value;
-      if (sub.opcode === 'data_listcontents') return '@' + sub.fields.LIST.value;
+      if (sub.opcode === 'data_variable') return nameToken('$', sub.fields.VARIABLE.value);
+      if (sub.opcode === 'data_listcontents') return nameToken('@', sub.fields.LIST.value);
       // Menu shadow (sound_sounds_menu, motion_goto_menu, event_broadcast_menu, …)
       const menuKeys = sub.fields ? Object.keys(sub.fields) : [];
       for (let i = 0; i < menuKeys.length; i++) {
@@ -1643,13 +2226,19 @@ function serializeBlockToDsl(blk, blocks, depth) {
     }
     // A real reporter is plugged in
     if (sub.opcode === 'data_variable' && sub.fields && sub.fields.VARIABLE) {
-      return '$' + sub.fields.VARIABLE.value;
+      return nameToken('$', sub.fields.VARIABLE.value);
     }
     if (sub.opcode === 'data_listcontents' && sub.fields && sub.fields.LIST) {
-      return '@' + sub.fields.LIST.value;
+      return nameToken('@', sub.fields.LIST.value);
+    }
+    // %参数 引用：还原成裸 %名称（不是括号包裹的报告器），与解析端的 %名称 token 对应
+    if (sub.opcode === 'argument_reporter_string_number' || sub.opcode === 'argument_reporter_boolean') {
+      const f = sub.fields && sub.fields.VALUE;
+      const nm = f ? (typeof f === 'object' ? f.value : f) : '';
+      return '%' + String(nm == null ? '' : nm);
     }
     if (depth > 6) return '(' + sub.opcode + ')'; // pathological nesting guard
-    return '(' + serializeBlockToDsl(sub, blocks, depth + 1) + ')';
+    return '(' + serializeBlockToDsl(sub, blocks, depth + 1, runtime) + ')';
   };
 
   const tokenForField = (fieldName) => {
@@ -1657,13 +2246,53 @@ function serializeBlockToDsl(blk, blocks, depth) {
     if (!f) return null;
     const value = typeof f === 'object' ? f.value : f;
     if (value === null || value === undefined) return null;
-    if (fieldName === 'VARIABLE') return '$' + value;
-    if (fieldName === 'LIST') return '@' + value;
+    if (fieldName === 'VARIABLE') return nameToken('$', value);
+    if (fieldName === 'LIST') return nameToken('@', value);
     return quote(value);
   };
 
+  // 自定义积木三类块在 generic 分支前拦截（procedures_* 不在 OPCODE_SCHEMA，
+  // argument_reporter 要还原成 %参数）。
+  if (blk.opcode === 'procedures_definition') {
+    const cb = blk.inputs && blk.inputs.custom_block ? blocks[blk.inputs.custom_block.block] : null;
+    const mutation = (cb && cb.mutation) || {};
+    const proccode = String(mutation.proccode == null ? '' : mutation.proccode);
+    let argNames = [];
+    try { argNames = JSON.parse(mutation.argumentnames || '[]'); } catch (e) { argNames = []; }
+    if (!Array.isArray(argNames)) argNames = [];
+    // argumentnames 与 proccode 占位符按下标 zip，还原 (名)/<名> 显示形式
+    let ai = 0;
+    const display = proccode.replace(/%[sb]/g, ph => {
+      const nm = ai < argNames.length && argNames[ai] != null ? String(argNames[ai]) : 'arg' + (ai + 1);
+      ai++;
+      return ph === '%b' ? '<' + nm + '>' : '(' + nm + ')';
+    });
+    return 'define ' + display + (String(mutation.warp) === 'true' ? ' warp=true' : '');
+  }
+  if (blk.opcode === 'procedures_call') {
+    const mutation = blk.mutation || {};
+    const proccode = String(mutation.proccode == null ? '' : mutation.proccode);
+    let argIds = [];
+    try { argIds = JSON.parse(mutation.argumentids || '[]'); } catch (e) { argIds = []; }
+    if (!Array.isArray(argIds)) argIds = [];
+    const callParts = ['call', quote(proccode)];
+    argIds.forEach(argId => {
+      const token = tokenForInput(argId);
+      // null 只有空的 %b 会遇到（无输入可序列化），此时省略该 token
+      if (token !== null) callParts.push(token);
+    });
+    return callParts.join(' ');
+  }
+  if (blk.opcode === 'argument_reporter_string_number' || blk.opcode === 'argument_reporter_boolean') {
+    const f = blk.fields && blk.fields.VALUE;
+    const nm = f ? (typeof f === 'object' ? f.value : f) : '';
+    return '%' + String(nm == null ? '' : nm);
+  }
+
   const parts = [blk.opcode];
-  const schema = OPCODE_SCHEMA[blk.opcode];
+  // 核心积木直接命中 OPCODE_SCHEMA；扩展积木带 runtime 时走 _blockInfo 推导的动态 schema，
+  // 无 runtime 且不在 OPCODE_SCHEMA → 走后面的 unknown best-effort 分支。
+  const schema = resolveBlockSchema(blk.opcode, runtime);
   const usedInputs = {};
   const usedFields = {};
 
@@ -1706,7 +2335,66 @@ function serializeBlockToDsl(blk, blocks, depth) {
   return parts.join(' ');
 }
 
-function convertBlockObjToDsl(obj, indent) {
+/**
+ * NeoWarp: 把一个 target（角色或舞台）的全部顶层脚本序列化为 DSL 文本。
+ * 遍历 blocks._blocks 中的 topLevel 脚本，处理 SUBSTACK/SUBSTACK2 的 2 空格
+ * 缩进与 else 行，输出与 AI 助手 getSpriteScripts 工具完全一致。
+ *
+ * @param {object} target VM target（vm.editingTarget 或按名查找的结果）
+ * @returns {Array<{blockId: string, dsl: string}>}
+ */
+function collectTargetDsl(target) {
+  const runtime = target && target.runtime; // 扩展积木序列化需要动态 schema
+  const scripts = [];
+  const allBlocks = target.blocks._blocks;
+  Object.keys(allBlocks).forEach(function(blockId) {
+    const b = allBlocks[blockId];
+    if (!b.topLevel || b.parent !== null) return;
+    // 漂浮值块（拖到画布上的独立 shadow/reporter）：不是可执行语句，序列化成注释行。
+    // 解析端忽略 # 开头的行，这样面板自产文本重新应用时始终可用、不会校验失败。
+    if (b.shadow === true || VALUE_PRIMITIVE_OPCODES[b.opcode] ||
+        (b.opcode && b.opcode.indexOf('argument_reporter_') === 0)) {
+      scripts.push({ blockId: blockId, dsl: '# 漂浮值块: ' + serializeBlockToDsl(b, allBlocks, 0, runtime) });
+      return;
+    }
+    const dslLines = [];
+    const emitBlock = (blk, ind) => {
+      dslLines.push('  '.repeat(ind) + serializeBlockToDsl(blk, allBlocks, 0, runtime));
+      if (blk.inputs && blk.inputs.SUBSTACK && blk.inputs.SUBSTACK.block) {
+        let sub = allBlocks[blk.inputs.SUBSTACK.block];
+        while (sub) {
+          emitBlock(sub, ind + 1);
+          sub = sub.next ? allBlocks[sub.next] : null;
+        }
+      }
+      if (blk.inputs && blk.inputs.SUBSTACK2 && blk.inputs.SUBSTACK2.block) {
+        dslLines.push('  '.repeat(ind) + 'else');
+        let sub2 = allBlocks[blk.inputs.SUBSTACK2.block];
+        while (sub2) {
+          emitBlock(sub2, ind + 1);
+          sub2 = sub2.next ? allBlocks[sub2.next] : null;
+        }
+      }
+      if (blk.next) {
+        if (blk.opcode === 'procedures_definition') {
+          // define hat 的身体是 next 链：以 ind+1 缩进输出，重解析时才能回到 define 体内
+          let sub = allBlocks[blk.next];
+          while (sub) {
+            emitBlock(sub, ind + 1);
+            sub = sub.next ? allBlocks[sub.next] : null;
+          }
+        } else if (ind === 0) {
+          emitBlock(allBlocks[blk.next], 0);
+        }
+      }
+    };
+    emitBlock(b, 0);
+    scripts.push({ blockId: blockId, dsl: dslLines.join('\n') });
+  });
+  return scripts;
+}
+
+function convertBlockObjToDsl(obj, indent, runtime) {
   indent = indent || 0;
   var pad = '  '.repeat(indent);
   if (!obj || !obj.opcode) return [];
@@ -1719,12 +2407,23 @@ function convertBlockObjToDsl(obj, indent) {
     if (fv && typeof fv === 'object') fv = fv.value;
     return fv;
   };
+  var escapeDslText = function(v) {
+    return String(v)
+      .replace(/\\/g, '\\\\')
+      .replace(/"/g, '\\"')
+      .replace(/\n/g, '\\n')
+      .replace(/\r/g, '\\r')
+      .replace(/\t/g, '\\t');
+  };
+  var nameToken = function(prefix, name) {
+    return /[\s"\\]/.test(String(name)) ? prefix + '"' + escapeDslText(name) + '"' : prefix + name;
+  };
   var encodeInput = function(val) {
     if (typeof val === 'number') return String(val);
     if (typeof val === 'boolean') return val ? 'true' : 'false';
-    if (typeof val === 'string') return '"' + val.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+    if (typeof val === 'string') return '"' + escapeDslText(val) + '"';
     if (val && typeof val === 'object') {
-      if (val.opcode) return '(' + convertBlockObjToDsl(val, 0).join(' ') + ')';
+      if (val.opcode) return '(' + convertBlockObjToDsl(val, 0, runtime).join(' ') + ')';
       // Variable/list reporter shorthand used by some callers
       if (val.VARIABLE) return '$' + val.VARIABLE;
       if (val.LIST) return '@' + val.LIST;
@@ -1734,13 +2433,14 @@ function convertBlockObjToDsl(obj, indent) {
   var encodeField = function(key) {
     var fv = fieldValue(key);
     if (fv === undefined || fv === null) return null;
-    if (key === 'VARIABLE') return '$' + fv;
-    if (key === 'LIST') return '@' + fv;
-    return '"' + String(fv).replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
+    if (key === 'VARIABLE') return nameToken('$', fv);
+    if (key === 'LIST') return nameToken('@', fv);
+    return '"' + escapeDslText(fv) + '"';
   };
 
   var parts = [obj.opcode];
-  var schema = OPCODE_SCHEMA[obj.opcode];
+  // 扩展积木带 runtime 时走 _blockInfo 推导的动态 schema；否则只认 OPCODE_SCHEMA
+  var schema = resolveBlockSchema(obj.opcode, runtime);
   var usedInputs = {};
   var usedFields = {};
 
@@ -1792,7 +2492,7 @@ function convertBlockObjToDsl(obj, indent) {
   if (subSource) {
     var subArr = Array.isArray(subSource) ? subSource : [subSource];
     subArr.forEach(function(b) {
-      convertBlockObjToDsl(b, indent + 1).forEach(function(l) { lines.push(l); });
+      convertBlockObjToDsl(b, indent + 1, runtime).forEach(function(l) { lines.push(l); });
     });
   }
   var sub2Source = (obj.inputs && obj.inputs.SUBSTACK2) || obj.substack2;
@@ -1800,20 +2500,22 @@ function convertBlockObjToDsl(obj, indent) {
     lines.push(pad + 'else');
     var sub2Arr = Array.isArray(sub2Source) ? sub2Source : [sub2Source];
     sub2Arr.forEach(function(b) {
-      convertBlockObjToDsl(b, indent + 1).forEach(function(l) { lines.push(l); });
+      convertBlockObjToDsl(b, indent + 1, runtime).forEach(function(l) { lines.push(l); });
     });
   }
   if (obj.next) {
-    convertBlockObjToDsl(obj.next, indent).forEach(function(l) { lines.push(l); });
+    convertBlockObjToDsl(obj.next, indent, runtime).forEach(function(l) { lines.push(l); });
   }
   return lines;
 }
 
 // Parse Scratch block DSL text into {hat: descriptor, blocks: [descriptor, ...]}.
 function parseScratchDSL(scriptText, target) {
-  void target; // reserved for future use; variable/list id resolution happens in buildBlockStructure
+  // 扩展积木动态 schema 来源（target.runtime）；变量/列表 id 解析仍在 buildBlockStructure
+  const runtime = target && target.runtime;
   const warnings = [];
   const errors = [];
+  const defines = []; // 本段文本中的自定义积木定义（proc 对象）
   const rawLines = String(scriptText == null ? '' : scriptText).split('\n');
   const parsedLines = [];
   for (let li = 0; li < rawLines.length; li++) {
@@ -1829,29 +2531,38 @@ function parseScratchDSL(scriptText, target) {
   }
 
   if (parsedLines.length === 0) {
-    return { hat: { opcode: 'event_whenflagclicked', inputs: {}, fields: {} }, blocks: [], warnings, errors };
+    return { hat: { opcode: 'event_whenflagclicked', inputs: {}, fields: {} }, blocks: [], defines, warnings, errors };
   }
 
   // Determine hat. First line (indent 0) is the hat if it looks like one.
   const firstLine = parsedLines[0];
-  let firstParsed;
-  try {
-    firstParsed = parseDslLine(firstLine.content);
-  } catch (e) {
-    throw new Error('line ' + firstLine.lineNo + ': ' + e.message + ' (near: "' + firstLine.content.substring(0, 60) + '")');
-  }
   let hatDescriptor;
   let bodyStartIdx;
-  const isFirstHat = firstParsed.opcode.indexOf('event_') === 0 || firstParsed.opcode === 'control_start_as_clone';
-  if (isFirstHat) {
-    if (!OPCODE_SCHEMA[firstParsed.opcode]) {
-      warnings.push('line ' + firstLine.lineNo + ': unknown opcode "' + firstParsed.opcode + '" (not in OPCODE_SCHEMA, block may not work correctly)');
-    }
-    hatDescriptor = mapArgsToDescriptor(firstParsed.opcode, firstParsed.args);
+  if (isDefineLine(firstLine.content)) {
+    // define 行是自定义积木的 hat：proccode/参数表由 parseDefineLine 扫描得出，
+    // 身体从下一行开始（bodyStartIdx=1）。
+    const node = parseDefineLine(firstLine.content, firstLine.lineNo);
+    hatDescriptor = { opcode: 'procedures_definition', inputs: {}, fields: {}, proc: node.proc, lineNo: firstLine.lineNo };
+    defines.push(node.proc);
     bodyStartIdx = 1;
   } else {
-    hatDescriptor = { opcode: 'event_whenflagclicked', inputs: {}, fields: {} };
-    bodyStartIdx = 0;
+    let firstParsed;
+    try {
+      firstParsed = parseDslLine(firstLine.content, runtime);
+    } catch (e) {
+      throw new Error('line ' + firstLine.lineNo + ': ' + e.message + ' (near: "' + firstLine.content.substring(0, 60) + '")');
+    }
+    const isFirstHat = firstParsed.opcode.indexOf('event_') === 0 || firstParsed.opcode === 'control_start_as_clone';
+    if (isFirstHat) {
+      if (!resolveBlockSchema(firstParsed.opcode, runtime)) {
+        warnings.push('line ' + firstLine.lineNo + ': unknown opcode "' + firstParsed.opcode + '" (not in OPCODE_SCHEMA, block may not work correctly)');
+      }
+      hatDescriptor = mapArgsToDescriptor(firstParsed.opcode, firstParsed.args, runtime);
+      bodyStartIdx = 1;
+    } else {
+      hatDescriptor = { opcode: 'event_whenflagclicked', inputs: {}, fields: {} };
+      bodyStartIdx = 0;
+    }
   }
 
   // Build the body tree using a stack.
@@ -1865,38 +2576,58 @@ function parseScratchDSL(scriptText, target) {
 
     if (content === 'else') {
       // Mark the matching C-block entry (same indent) as being in its else branch.
+      // 只接受「同缩进且支持 else 分支（substack2）」的栈项；栈空、缩进对不上、
+      // 或匹配项不支持 else 时报错，避免 else 被静默吞掉或错误归入其它积木。
+      let elseMatched = false;
       for (let sj = stack.length - 1; sj >= 0; sj--) {
-        if (stack[sj].indent === indent) {
+        const entrySchema = resolveBlockSchema(stack[sj].node.opcode, runtime);
+        if (stack[sj].indent === indent && entrySchema && entrySchema.substack2) {
           stack[sj].inElse = true;
+          elseMatched = true;
           break;
         }
+      }
+      if (!elseMatched) {
+        errors.push('line ' + lineNo + ': "else" 没有匹配到同缩进的 if/if_else 积木。');
       }
       continue;
     }
 
-    let parsed;
-    try {
-      parsed = parseDslLine(content);
-    } catch (e) {
-      throw new Error('line ' + lineNo + ': ' + e.message + ' (near: "' + content.substring(0, 60) + '")');
+    // define/call 行在 parseDslLine 之前拦截：它们的语法不是「opcode + 位置参数」。
+    let node;
+    let hasSubstack = false;
+    if (isDefineLine(content)) {
+      node = parseDefineLine(content, lineNo);
+      defines.push(node.proc);
+    } else if (isCallLine(content)) {
+      node = parseCallLine(content, lineNo);
+    } else {
+      let parsed;
+      try {
+        parsed = parseDslLine(content, runtime);
+      } catch (e) {
+        throw new Error('line ' + lineNo + ': ' + e.message + ' (near: "' + content.substring(0, 60) + '")');
+      }
+      const schema = resolveBlockSchema(parsed.opcode, runtime);
+      if (!schema) {
+        warnings.push('line ' + lineNo + ': unknown opcode "' + parsed.opcode + '" (not in OPCODE_SCHEMA, block may not work correctly)');
+      }
+      hasSubstack = !!(schema && (schema.substack === true || schema.substack2 === true));
+      node = {
+        opcode: parsed.opcode,
+        rawArgs: parsed.args,
+        indent,
+        substack: [],
+        substack2: []
+      };
     }
-    const schema = OPCODE_SCHEMA[parsed.opcode];
-    if (!schema) {
-      warnings.push('line ' + lineNo + ': unknown opcode "' + parsed.opcode + '" (not in OPCODE_SCHEMA, block may not work correctly)');
-    }
-    const hasSubstack = !!(schema && (schema.substack === true || schema.substack2 === true));
-    const node = {
-      opcode: parsed.opcode,
-      rawArgs: parsed.args,
-      indent,
-      substack: [],
-      substack2: []
-    };
+    node.indent = indent;
+    node.lineNo = lineNo;
 
     // Indenting under a block with no body slot would otherwise be silently dropped:
     // the line just becomes a sibling and the model never learns its nesting was lost.
     if (prevNode && indent > prevIndent && !prevHadSubstack) {
-      errors.push('line ' + lineNo + ': "' + parsed.opcode + '" is indented under "' +
+      errors.push('line ' + lineNo + ': "' + node.opcode + '" is indented under "' +
         prevNode.opcode + '", which has no body slot. Only C-blocks (repeat, forever, if, ...) ' +
         'can contain blocks. Remove the indentation.');
     }
@@ -1925,8 +2656,16 @@ function parseScratchDSL(scriptText, target) {
     }
   }
 
-  const blocks = rootNodes.map(convertNode);
-  return { hat: hatDescriptor, blocks, warnings, errors };
+  const blocks = rootNodes.map(node => convertNode(node, runtime));
+  // %参数 引用：按最近 define 的参数类型翻转 reporter 类型；define 体外引用记错误。
+  // define hat 的身体是根节点列表，因此用它的参数表遍历全部根块。
+  let hatProcMap = null;
+  if (hatDescriptor && hatDescriptor.opcode === 'procedures_definition' && hatDescriptor.proc) {
+    hatProcMap = procParamMap(hatDescriptor.proc);
+  }
+  applyArgumentRefs(hatDescriptor, null, errors);
+  blocks.forEach(b => applyArgumentRefs(b, hatProcMap, errors));
+  return { hat: hatDescriptor, blocks, defines, warnings, errors };
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -2085,17 +2824,140 @@ const aiSnapshots = new Map();
 const aiSnapshotOrder = [];
 const AI_SNAPSHOT_LIMIT = 4;
 
+// NeoWarp: 「源代码Beta」标签页面板 —— 内嵌在编辑器第 4 个 TabPanel 中，
+// 与造型/声音同级的完整区域：左侧行号、可编辑 DSL 文本、应用到积木。
+// 序列化复用 collectTargetDsl（与 AI 助手 getSpriteScripts 输出一致），
+// 应用复用 parseScratchDSL/validateParsedScript/buildScriptBlocks（与
+// AI 助手 addScript 同一条链路）。样式见 editor/gui/gui.css。
+const SOURCE_CODE_REFRESH_DELAY = 300;
+
+/**
+ * 把「源代码Beta」面板的文本应用到 target：按空行拆成多个脚本段，逐段
+ * 解析（parseScratchDSL）并校验（validateParsedScript），全部通过后一次性
+ * 替换 target 的全部顶层脚本（先删后建，与 AI 助手 addScript 相同的构建
+ * 链路）。任何一段失败都不会改动 VM，避免留下半套脚本。
+ *
+ * @param {object} vm VirtualMachine
+ * @param {object} target 目标（角色或舞台）
+ * @param {string} text 面板中的 DSL 文本
+ * @returns {{success: boolean, scripts?: number, blocks?: number,
+ *            warnings?: string[], error?: string}}
+ */
+function applyDslTextToTarget(vm, target, text) {
+  const chunks = String(text == null ? '' : text)
+    .split(/\n[ \t]*\n/)
+    .map(chunk => chunk.replace(/^\s+|\s+$/g, ''))
+    // 只含注释/空白的段不生成任何积木，直接跳过
+    .filter(chunk => chunk.split('\n').some(line => {
+      const trimmed = line.trim();
+      return trimmed.length > 0 && trimmed.charAt(0) !== '#';
+    }));
+
+  // 1. 解析全部脚本段（define/call 的行级解析错误在这里抛出）
+  const parsedScripts = [];
+  const warnings = [];
+  for (let i = 0; i < chunks.length; i++) {
+    let parsed;
+    try {
+      parsed = parseScratchDSL(chunks[i], target);
+    } catch (e) {
+      return { success: false, error: 'DSL 解析错误（第 ' + (i + 1) + ' 个脚本）：' + (e.message || String(e)) };
+    }
+    parsedScripts.push(parsed);
+  }
+
+  // 2. 组装自定义积木注册表：VM 现有 define 为底，本批文本 define 覆盖（先查重）。
+  //    替换全部脚本会删掉 VM 里旧 define，所以文本 define 必须重新分配参数 id。
+  const vmRegistry = collectProcRegistry(target);
+  const registry = new Map(vmRegistry);
+  const textDefineProccodes = [];
+  for (let i = 0; i < parsedScripts.length; i++) {
+    const defines = parsedScripts[i].defines || [];
+    for (let di = 0; di < defines.length; di++) {
+      const proc = defines[di];
+      if (textDefineProccodes.indexOf(proc.proccode) >= 0) {
+        return { success: false, error: '重复定义自定义积木 "' + proc.proccode + '"：同一批文本中 define 了两次。' };
+      }
+      textDefineProccodes.push(proc.proccode);
+    }
+  }
+  if (textDefineProccodes.length > 0) {
+    parsedScripts.forEach(parsed => registerTextDefines(registry, parsed.defines));
+  }
+
+  // 3. registry 挂到每个 parsed，校验与构建共用同一套参数 id。
+  parsedScripts.forEach(parsed => { parsed.procRegistry = registry; });
+
+  // 4. call 悬空警告：define 只存在于 VM（本批文本没有）时，替换全部脚本会把它删掉。
+  parsedScripts.forEach(parsed => {
+    const walkCalls = desc => {
+      if (!desc || typeof desc !== 'object' || !desc.opcode) return;
+      if (desc.opcode === 'procedures_call' &&
+          textDefineProccodes.indexOf(desc.proccode) < 0 &&
+          vmRegistry.has(desc.proccode)) {
+        warnings.push('call 引用 "' + desc.proccode +
+          '"：其 define 不在本次文本中，应用（替换全部脚本）后该定义会被删除，调用将悬空。');
+      }
+      (desc.substack || []).forEach(walkCalls);
+      (desc.substack2 || []).forEach(walkCalls);
+    };
+    if (parsed.hat) walkCalls(parsed.hat);
+    (parsed.blocks || []).forEach(walkCalls);
+  });
+
+  // 5. 校验全部通过后才动 VM，避免留下半套脚本。
+  for (let i = 0; i < parsedScripts.length; i++) {
+    const validation = validateParsedScript(parsedScripts[i], target);
+    if (validation.errors.length > 0) {
+      return { success: false, error: formatValidationError(validation.errors, chunks[i]) };
+    }
+    warnings.push(...(parsedScripts[i].warnings || []), ...(validation.warnings || []));
+  }
+
+  // 全部构建成功后再动 VM：删除现有顶层脚本（Blocks.deleteBlock 会递归
+  // 删除子积木与 shadow），再创建新积木。
+  const allBlocks = [];
+  parsedScripts.forEach(parsed => {
+    buildScriptBlocks(parsed, target).blocks.forEach(b => allBlocks.push(b));
+  });
+  const topLevelIds = Object.keys(target.blocks._blocks).filter(id => {
+    const b = target.blocks._blocks[id];
+    return b && b.topLevel && b.parent === null;
+  });
+  topLevelIds.forEach(id => target.blocks.deleteBlock(id));
+  allBlocks.forEach(b => target.blocks.createBlock(b));
+  vm.runtime.emitProjectChanged();
+  vm.emitWorkspaceUpdate();
+  vm.emitTargetsUpdate();
+  return {
+    success: true,
+    scripts: parsedScripts.length,
+    blocks: allBlocks.length,
+    warnings: warnings.length ? warnings : undefined
+  };
+}
+
 const DesktopHOC = function (WrappedComponent) {
   class DesktopComponent extends React.Component {
     constructor (props) {
       super(props);
       this.state = {
         title: '',
-        collaborationState: { isCollaborating: false, role: null, onlineCount: 0, permissions: null }
+        collaborationState: { isCollaborating: false, role: null, onlineCount: 0, permissions: null },
+        // NeoWarp: 标签栏「源代码Beta」标签页显隐
+        showSourceCodeButton: true
       };
       this.handleUpdateProjectTitle = this.handleUpdateProjectTitle.bind(this);
       this.handleClickEncryptedSave = this.handleClickEncryptedSave.bind(this);
       this.handleSaveAsViewsb3 = this.handleSaveAsViewsb3.bind(this);
+
+      // NeoWarp: 「源代码Beta」按钮显隐（编辑器设置模态框 → 外观），
+      // 构造期同步读一次，避免按钮先显示再隐藏的闪烁
+      try {
+        if (typeof EditorPreload !== 'undefined' && EditorPreload.getShowSourceCodeButton) {
+          this.state.showSourceCodeButton = EditorPreload.getShowSourceCodeButton() !== false;
+        }
+      } catch (e) { /* 读不到用默认值（显示） */ }
 
       // Changing locale always re-mounts this component
       const stateFromMain = EditorPreload.setLocale(this.props.locale);
@@ -2126,6 +2988,14 @@ const DesktopHOC = function (WrappedComponent) {
       }
     }
     componentDidMount () {
+      // NeoWarp: 「源代码Beta」按钮显隐变更推送（本窗口保存后主进程也会
+      // 回推一次，因此同窗口与其他编辑器窗口都走同一条实时更新通道）
+      if (typeof EditorPreload !== 'undefined' && EditorPreload.onShowSourceCodeButtonChanged) {
+        EditorPreload.onShowSourceCodeButtonChanged(enabled => {
+          this.setState({ showSourceCodeButton: enabled !== false });
+        });
+      }
+
       EditorPreload.setExportForPackager(() => this.props.vm.saveProjectSb3('arraybuffer')
         .then((buffer) => ({
           name: this.state.title,
@@ -2808,36 +3678,7 @@ const DesktopHOC = function (WrappedComponent) {
                 result = { success: false, error: 'Sprite "' + scriptsTargetName + '" not found. Available: ' + available };
                 break;
               }
-              const scripts = [];
-              const allBlocks = target.blocks._blocks;
-              Object.keys(allBlocks).forEach(function(blockId) {
-                var b = allBlocks[blockId];
-                if (!b.topLevel || b.parent !== null) return;
-                var dslLines = [];
-                function emitBlock(blk, ind) {
-                  dslLines.push('  '.repeat(ind) + serializeBlockToDsl(blk, allBlocks, 0));
-                  if (blk.inputs && blk.inputs.SUBSTACK && blk.inputs.SUBSTACK.block) {
-                    var sub = allBlocks[blk.inputs.SUBSTACK.block];
-                    while (sub) {
-                      emitBlock(sub, ind + 1);
-                      sub = sub.next ? allBlocks[sub.next] : null;
-                    }
-                  }
-                  if (blk.inputs && blk.inputs.SUBSTACK2 && blk.inputs.SUBSTACK2.block) {
-                    dslLines.push('  '.repeat(ind) + 'else');
-                    var sub2 = allBlocks[blk.inputs.SUBSTACK2.block];
-                    while (sub2) {
-                      emitBlock(sub2, ind + 1);
-                      sub2 = sub2.next ? allBlocks[sub2.next] : null;
-                    }
-                  }
-                  if (blk.next && ind === 0) {
-                    emitBlock(allBlocks[blk.next], 0);
-                  }
-                }
-                emitBlock(b, 0);
-                scripts.push({ blockId: blockId, dsl: dslLines.join('\n') });
-              });
+              const scripts = collectTargetDsl(target);
               result = { success: true, data: { spriteName: scriptsTargetName, scriptCount: scripts.length, scripts: scripts } };
               break;
             }
@@ -3603,7 +4444,7 @@ const DesktopHOC = function (WrappedComponent) {
                 if (!scriptText) { result = { success: false, error: 'No script provided. You passed: ' + JSON.stringify(params).substring(0, 200) + '. The "script" parameter MUST be a DSL text string like "event_whenflagclicked\\n  motion_movesteps 10", NOT a JSON object.' }; break; }
                 if (typeof scriptText === 'object') {
                   try {
-                    var converted = convertBlockObjToDsl(scriptText, 0);
+                    var converted = convertBlockObjToDsl(scriptText, 0, target && target.runtime);
                     scriptText = converted.join('\n');
                   } catch (convErr) {
                     result = { success: false, error: 'Failed to convert script object to DSL text: ' + (convErr.message || String(convErr)) + '. Please pass a DSL text string instead. Example: "event_whenflagclicked\\n  motion_movesteps 10"' };
@@ -3677,7 +4518,7 @@ const DesktopHOC = function (WrappedComponent) {
                         if (!scriptText) { opResults.push({ index: opIdx, type: 'add_script', success: false, error: 'No script provided. You passed: ' + JSON.stringify(op).substring(0, 200) + '. The "script" field MUST be a DSL text string like "event_whenflagclicked\\n  motion_movesteps 10", NOT a JSON object.' }); break; }
                         if (typeof scriptText === 'object') {
                           try {
-                            var eoConverted = convertBlockObjToDsl(scriptText, 0);
+                            var eoConverted = convertBlockObjToDsl(scriptText, 0, target && target.runtime);
                             scriptText = eoConverted.join('\n');
                           } catch (eoConvErr) {
                             opResults.push({ index: opIdx, type: 'add_script', success: false, error: 'Failed to convert script object to DSL: ' + (eoConvErr.message || String(eoConvErr)) });
@@ -3742,7 +4583,7 @@ const DesktopHOC = function (WrappedComponent) {
                         }
                         if (typeof insertText === 'object') {
                           try {
-                            insertText = convertBlockObjToDsl(insertText, 0).join('\n');
+                            insertText = convertBlockObjToDsl(insertText, 0, target && target.runtime).join('\n');
                           } catch (convErr) {
                             opResults.push({ index: opIdx, type: 'insert_blocks', success: false, error: 'Failed to convert blocks object to DSL: ' + (convErr.message || String(convErr)) });
                             break;
@@ -6205,6 +7046,9 @@ const DesktopHOC = function (WrappedComponent) {
           onClickLeaveCollaboration={handleClickLeaveCollaboration}
           collaborationState={this.state.collaborationState}
           securityManager={securityManager}
+          // NeoWarp: 标签栏「源代码Beta」标签页显隐 + 内嵌 DSL 面板
+          showSourceCodeButton={this.state.showSourceCodeButton}
+          sourceCodePanel={<SourceCodePanel vm={this.props.vm} />}
           {...props}
         />
       );
@@ -6279,6 +7123,218 @@ const DesktopHOC = function (WrappedComponent) {
     mapStateToProps,
     mapDispatchToProps
   )(DesktopComponent);
+};
+
+// NeoWarp: SourceCodePanel 定义在 DesktopHOC 之后（模块级），因为
+// scripts/test-dsl-roundtrip.js 会把「const DesktopHOC = function」之前的代码
+// 当纯 JS 提取求值，JSX 出现在其前会让测试无法运行。
+class SourceCodePanel extends React.Component {
+  constructor (props) {
+    super(props);
+    this.state = {
+      text: '',
+      loadedText: '',
+      targetName: '',
+      scriptCount: 0,
+      status: null // {type: 'ok'|'error', msg}
+    };
+    this.gutterRef = React.createRef();
+    this.handleTextChange = this.handleTextChange.bind(this);
+    this.handleTextScroll = this.handleTextScroll.bind(this);
+    this.handleKeyDown = this.handleKeyDown.bind(this);
+    this.handleApply = this.handleApply.bind(this);
+    this.handleCopy = this.handleCopy.bind(this);
+    this.reloadFromTarget = this.reloadFromTarget.bind(this);
+  }
+  componentDidMount () {
+    this.reloadFromTarget();
+    // 积木变化 / 目标切换 → 防抖同步；用户有未应用的编辑时不覆盖文本
+    this._onSyncNeeded = () => {
+      if (this._refreshTimer) clearTimeout(this._refreshTimer);
+      this._refreshTimer = setTimeout(() => {
+        if (this.state.text === this.state.loadedText) this.reloadFromTarget();
+      }, SOURCE_CODE_REFRESH_DELAY);
+    };
+    this.props.vm.runtime.on('PROJECT_CHANGED', this._onSyncNeeded);
+    this.props.vm.runtime.on('TARGETS_UPDATE', this._onSyncNeeded);
+  }
+  componentWillUnmount () {
+    this.props.vm.runtime.removeListener('PROJECT_CHANGED', this._onSyncNeeded);
+    this.props.vm.runtime.removeListener('TARGETS_UPDATE', this._onSyncNeeded);
+    if (this._refreshTimer) clearTimeout(this._refreshTimer);
+  }
+  reloadFromTarget () {
+    const target = this.props.vm.editingTarget;
+    if (!target) {
+      this.setState({ text: '', loadedText: '', targetName: '', scriptCount: 0, status: null });
+      return;
+    }
+    const scripts = collectTargetDsl(target);
+    const text = scripts.map(script => script.dsl).join('\n\n');
+    this.setState({
+      text,
+      loadedText: text,
+      targetName: target.getName(),
+      scriptCount: scripts.length,
+      status: null
+    });
+  }
+  handleTextChange (e) {
+    this.setState({ text: e.target.value });
+  }
+  handleTextScroll (e) {
+    if (this.gutterRef.current) {
+      this.gutterRef.current.scrollTop = e.target.scrollTop;
+    }
+  }
+  handleKeyDown (e) {
+    // Tab 插入两个空格，保持 DSL 缩进编辑顺手
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const textarea = e.target;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const next = this.state.text.substring(0, start) + '  ' + this.state.text.substring(end);
+      this.setState({ text: next }, () => {
+        textarea.selectionStart = start + 2;
+        textarea.selectionEnd = start + 2;
+      });
+    }
+  }
+  handleApply () {
+    const target = this.props.vm.editingTarget;
+    if (!target) return;
+    const outcome = applyDslTextToTarget(this.props.vm, target, this.state.text);
+    if (outcome.success) {
+      // 应用成功：把当前文本标记为已同步（不再自动回读覆盖，保留注释等
+      // 用户格式），后续积木变化仍会触发自动同步
+      let msg = '已应用：' + outcome.scripts + ' 个脚本 · ' + outcome.blocks + ' 个积木';
+      if (outcome.warnings && outcome.warnings.length > 0) {
+        msg += ' · ' + outcome.warnings.length + ' 条警告';
+      }
+      const nextStatus = {
+        type: 'ok',
+        msg: msg,
+        detail: outcome.warnings ? outcome.warnings.join('\n') : undefined
+      };
+      this.setState(prevState => ({
+        loadedText: prevState.text,
+        scriptCount: outcome.scripts,
+        status: nextStatus
+      }));
+    } else {
+      this.setState({ status: { type: 'error', msg: outcome.error } });
+    }
+  }
+  handleCopy () {
+    const text = this.state.text;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).catch(() => this.fallbackCopy(text));
+    } else {
+      this.fallbackCopy(text);
+    }
+  }
+  fallbackCopy (text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try { document.execCommand('copy'); } catch (e) { /* 忽略 */ }
+    document.body.removeChild(textarea);
+  }
+  render () {
+    const {text, targetName, scriptCount, status} = this.state;
+    const dirty = text !== this.state.loadedText;
+    const lineCount = text.length === 0 ? 1 : text.split('\n').length;
+    const lineNumbers = [];
+    for (let i = 1; i <= lineCount; i++) lineNumbers.push(i);
+    return (
+      <div className="neo-source-panel">
+        <div className="neo-source-toolbar">
+          <span className="neo-source-title-text">
+            源代码 <span className="neo-source-beta">Beta</span>
+          </span>
+          {targetName ? (
+            <span className="neo-source-target">
+              {`${targetName} · ${scriptCount} 个脚本${dirty ? ' · 未应用' : ''}`}
+            </span>
+          ) : null}
+          <span className="neo-source-toolbar-actions">
+            <button
+              className="neo-source-btn"
+              onClick={this.reloadFromTarget}
+              title="丢弃编辑，重新从积木生成"
+            >
+              重新载入
+            </button>
+            <button
+              className="neo-source-btn"
+              onClick={this.handleCopy}
+              disabled={!text}
+            >
+              复制
+            </button>
+            <button
+              className="neo-source-btn neo-source-apply"
+              onClick={this.handleApply}
+              title="用文本内容替换当前目标（角色/舞台）的全部脚本"
+            >
+              应用到积木
+            </button>
+          </span>
+        </div>
+        {status ? (
+          <div
+            className={'neo-source-status neo-source-status-' + status.type}
+            title={status.detail || undefined}
+          >
+            {status.msg}
+          </div>
+        ) : null}
+        <div className="neo-source-editor">
+          <div
+            className="neo-source-gutter"
+            ref={this.gutterRef}
+          >
+            {lineNumbers.map(n => (
+              <div
+                key={n}
+                className="neo-source-line-no"
+              >
+                {n}
+              </div>
+            ))}
+          </div>
+          <textarea
+            className="neo-source-textarea"
+            value={text}
+            onChange={this.handleTextChange}
+            onScroll={this.handleTextScroll}
+            onKeyDown={this.handleKeyDown}
+            spellCheck={false}
+            wrap="off"
+            placeholder={'此处显示当前角色/舞台的 DSL 代码：每行一条积木，2 空格缩进表示嵌套，空行分隔多个脚本。\n编辑后点击「应用到积木」生效。'}
+          />
+        </div>
+        <div className="neo-source-footer">
+          DSL 语法与 AI 助手一致 · 空行分隔多个脚本 · 应用后替换当前目标的全部脚本
+        </div>
+      </div>
+    );
+  }
+}
+SourceCodePanel.propTypes = {
+  vm: PropTypes.shape({
+    runtime: PropTypes.shape({
+      on: PropTypes.func.isRequired,
+      removeListener: PropTypes.func.isRequired
+    }).isRequired,
+    editingTarget: PropTypes.shape({
+      id: PropTypes.string
+    })
+  }).isRequired
 };
 
 export default DesktopHOC;

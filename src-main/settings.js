@@ -200,6 +200,27 @@ class Settings {
     this.data.lastDirectory = lastDirectory;
   }
 
+  // AI 助手 / SOLO 的默认工作流：none（不使用）/ plan / spec / goal。
+  // 仅决定新消息的默认选择；聊天里输入 / 仍可临时切换。
+  get aiWorkflow () {
+    const v = this.data.aiWorkflow;
+    return v === 'plan' || v === 'spec' || v === 'goal' ? v : 'none';
+  }
+  set aiWorkflow (aiWorkflow) {
+    this.data.aiWorkflow = aiWorkflow === 'plan' || aiWorkflow === 'spec' || aiWorkflow === 'goal'
+      ? aiWorkflow
+      : 'none';
+  }
+
+  // 工作流文档（plan.md / spec.md / tasks.md / checklist.md）的保存目录。
+  // 空字符串表示不落盘，文档只保留在会话里。
+  get aiWorkflowDocsDir () {
+    return typeof this.data.aiWorkflowDocsDir === 'string' ? this.data.aiWorkflowDocsDir : '';
+  }
+  set aiWorkflowDocsDir (aiWorkflowDocsDir) {
+    this.data.aiWorkflowDocsDir = typeof aiWorkflowDocsDir === 'string' ? aiWorkflowDocsDir : '';
+  }
+
   get spellchecker () {
     return this.data.spellchecker !== false;
   }
@@ -233,6 +254,15 @@ class Settings {
   }
   set stageAreaBackgroundImage (stageAreaBackgroundImage) {
     this.data.stageAreaBackgroundImage = stageAreaBackgroundImage;
+  }
+
+  // NeoWarp: 编辑器标签栏右侧「源代码Beta」按钮显隐开关（编辑器设置模态框
+  // → 外观）。默认显示，仅在用户显式保存过 false 后隐藏。
+  get showSourceCodeButton () {
+    return this.data.showSourceCodeButton !== false;
+  }
+  set showSourceCodeButton (showSourceCodeButton) {
+    this.data.showSourceCodeButton = showSourceCodeButton === true;
   }
 
   get aiProviders () {

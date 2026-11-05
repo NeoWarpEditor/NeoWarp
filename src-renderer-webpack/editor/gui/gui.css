@@ -841,3 +841,207 @@ p {
   height: 2.25rem !important;
   border-radius: 0 !important;
 }
+
+/* ============================================================
+   NeoWarp: 「源代码Beta」标签页面板（desktop-hoc.jsx SourceCodePanel）。
+   内嵌在编辑器第 4 个 TabPanel 中，与造型/声音同级：左侧行号 +
+   可编辑 DSL 文本 + 应用到积木。浅色为默认，data-gui-theme="dark"
+   时切换深色（与编辑器主题属性保持同一来源）。
+   ============================================================ */
+:global(.neo-source-panel) {
+  /* 绝对定位填满 .tab-panel（其 position: relative）：不能依赖 height:100%，
+     flex 链上的 min-height:auto 会让行号槽内容高度（长脚本可达数千 px）撑破
+     布局、把 body 撑出整页滚动条（滚轮变成滚整页）。绝对定位后本面板不
+     参与内容高度计算，与 Blockly 工作区（.blocks-wrapper + 绝对定位
+     injectionDiv）同一技巧，滚动只发生在 textarea 内部。 */
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fcfcfe;
+  color: #33373d;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  min-width: 0;
+  min-height: 0;
+}
+:global(.neo-source-toolbar) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+:global(.neo-source-title-text) {
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+:global(.neo-source-beta) {
+  font-size: 9px;
+  font-weight: 600;
+  color: #4c97ff;
+  border: 1px solid rgba(76, 151, 255, 0.5);
+  border-radius: 6px;
+  padding: 0 5px;
+  margin-left: 3px;
+}
+:global(.neo-source-target) {
+  font-size: 12px;
+  color: rgba(51, 55, 61, 0.6);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+:global(.neo-source-toolbar-actions) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+:global(.neo-source-btn) {
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  color: #33373d;
+  background: #ffffff;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 8px;
+  padding: 4px 12px;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+:global(.neo-source-btn:hover:not(:disabled)) {
+  background: #f2f4f8;
+  border-color: rgba(0, 0, 0, 0.25);
+}
+:global(.neo-source-btn:disabled) {
+  opacity: 0.45;
+  cursor: default;
+}
+:global(.neo-source-apply) {
+  color: #ffffff;
+  background: #4c97ff;
+  border-color: #4c97ff;
+}
+:global(.neo-source-apply:hover:not(:disabled)) {
+  background: #3d86ea;
+  border-color: #3d86ea;
+}
+:global(.neo-source-status) {
+  padding: 6px 12px;
+  font-size: 12px;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 96px;
+  overflow: auto;
+}
+:global(.neo-source-status-ok) {
+  color: #2b7a2b;
+  background: rgba(75, 180, 75, 0.12);
+}
+:global(.neo-source-status-error) {
+  color: #c62828;
+  background: rgba(230, 80, 80, 0.10);
+}
+/* 编辑区：行号槽 + 文本域共用同一套等宽字体/字号/行高，保证逐行对齐 */
+:global(.neo-source-editor) {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+  font-family: Consolas, "Cascadia Mono", Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+:global(.neo-source-gutter) {
+  flex-shrink: 0;
+  min-width: 44px;
+  overflow: hidden;
+  padding: 10px 0;
+  text-align: right;
+  background: rgba(0, 0, 0, 0.04);
+  border-right: 1px solid rgba(0, 0, 0, 0.08);
+  user-select: none;
+}
+:global(.neo-source-line-no) {
+  padding-right: 10px;
+  color: rgba(51, 55, 61, 0.4);
+  height: 1.55em; /* 等于 textarea 一行的高度 */
+  line-height: 1.55;
+}
+:global(.neo-source-textarea) {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 10px 14px;
+  background: transparent;
+  color: inherit;
+  font: inherit; /* 继承 .neo-source-editor 的等宽字体/字号/行高 */
+  white-space: pre;
+  overflow: auto;
+  tab-size: 2;
+  /* 滚到头/顶时不再把滚轮“链”给外层，避免代码区滚完后整页跟着滚 */
+  overscroll-behavior: contain;
+}
+:global(.neo-source-footer) {
+  padding: 6px 12px;
+  font-size: 11px;
+  color: rgba(51, 55, 61, 0.5);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  flex-shrink: 0;
+}
+/* 深色主题（编辑器 → 深色时由 html[data-gui-theme="dark"] 驱动） */
+[data-gui-theme="dark"] :global(.neo-source-panel) {
+  background: #202124;
+  color: #e8eaf0;
+}
+[data-gui-theme="dark"] :global(.neo-source-toolbar),
+[data-gui-theme="dark"] :global(.neo-source-status),
+[data-gui-theme="dark"] :global(.neo-source-footer) {
+  border-color: rgba(255, 255, 255, 0.10);
+}
+[data-gui-theme="dark"] :global(.neo-source-target) {
+  color: rgba(232, 234, 240, 0.6);
+}
+[data-gui-theme="dark"] :global(.neo-source-btn) {
+  color: #e8eaf0;
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+[data-gui-theme="dark"] :global(.neo-source-btn:hover:not(:disabled)) {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+[data-gui-theme="dark"] :global(.neo-source-apply) {
+  color: #ffffff;
+  background: #4c97ff;
+  border-color: #4c97ff;
+}
+[data-gui-theme="dark"] :global(.neo-source-apply:hover:not(:disabled)) {
+  background: #63a7ff;
+  border-color: #63a7ff;
+}
+[data-gui-theme="dark"] :global(.neo-source-status-ok) {
+  color: #7bd47b;
+  background: rgba(75, 180, 75, 0.15);
+}
+[data-gui-theme="dark"] :global(.neo-source-status-error) {
+  color: #ff8a80;
+  background: rgba(230, 80, 80, 0.15);
+}
+[data-gui-theme="dark"] :global(.neo-source-gutter) {
+  background: rgba(255, 255, 255, 0.04);
+  border-right-color: rgba(255, 255, 255, 0.10);
+}
+[data-gui-theme="dark"] :global(.neo-source-line-no) {
+  color: rgba(232, 234, 240, 0.4);
+}

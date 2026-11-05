@@ -120,7 +120,10 @@ function runHarness(script) {
         'noteBuiltinQuotaIfExhausted', 'scrollToBottom', 'finalizeProcessGroup',
         'updateStreamingReasoning', 'phoneClearStream', 'phonePushHistory', 'phonePushStream',
         'getTodoAppendTarget', 'executeToolCall', 'buildApiMessages', 'sendMessage',
-        'PROVIDERS', 'currentConfig', 'doApiCall',
+        'PROVIDERS', 'currentConfig', 'doApiCall', 'isGeneratingConvVisible', 'setGeneratingConv',
+        'getGeneratingConv', 'pushGeneratingMessage', 'trackSidebarTodoToolCalls', 'notifySidebarTodoTurnEnd',
+        'handleWorkflowTurnEnd',
+        'generationAbortRequested',
         'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', '__export',
         itsf + retryBlock + exportShim
     );
@@ -129,7 +132,7 @@ function runHarness(script) {
         [], chatHistory, true, abortController, 1234,
         streamingWrapper, streamingBubble, null,
         { appendChild: function() {}, querySelectorAll: function() { return []; } },
-        { createElement: makeElement },
+        { createElement: makeElement, getElementById: function() { return null; } },
         function(k) { return T[k] || k; },
         function(s) { return String(s); }, function() { return '12:00'; },
         function(md) { return 'MD:' + md; }, rec('renderSummaryFooter'),
@@ -142,6 +145,14 @@ function runHarness(script) {
         rec('sendMessage'),
         {}, { provider: 'none' },
         doApiCall,
+        function() { return true; },
+        rec('setGeneratingConv'),
+        function() { return null; },
+        function(m) { chatHistory.push(m); },
+        rec('trackSidebarTodoToolCalls'),
+        rec('notifySidebarTodoTurnEnd'),
+        rec('handleWorkflowTurnEnd'),
+        false,
         clock.setTimeout, clock.setInterval, clock.clearTimeout, clock.clearInterval,
         function(e) { exported = e; }
     );
@@ -174,9 +185,8 @@ async function main() {
     check('重试预算耗尽后不再有挂起任务', h.clock.pending() === 0);
     check('向用户呈现最后一次的报错', h.chatHistory.length === 1 && h.chatHistory[0].content === 'Error: ' + T.streamRetryExhausted + netErr.message, h.chatHistory);
     check('报错以 AI 消息渲染', h.calls.filter(function(c) { return c.name === 'appendAIMessage'; }).length === 1);
-    check('会话状态收尾（isLoading=false、按钮更新、流气泡移除）',
-        h.exported.isLoading === false && h.streamingWrapper.removed === true &&
-        h.calls.some(function(c) { return c.name === 'updateSendBtn'; }));
+    check('会话状态收尾（isLoading=false、流气泡移除；按钮重启用在切片外的收尾链里完成）',
+        h.exported.isLoading === false && h.streamingWrapper.removed === true, { isLoading: h.exported.isLoading, removed: h.streamingWrapper.removed });
 
     // ── S2: 第 3 次尝试成功（正常文本）→ 重试停止，正常收尾 ──
     console.log('S2: 重试期间恢复，成功后停止重试');
@@ -269,6 +279,17 @@ async function main() {
     check('AbortError 不可重试', fn({ name: 'AbortError' }) === false);
     [400, 401, 402, 403, 404, 422].forEach(function(s) { check('HTTP ' + s + ' 不可重试', fn({ name: 'Error', status: s }) === false); });
     [408, 429, 500, 502, 503, 529].forEach(function(s) { check('HTTP ' + s + ' 可重试', fn({ name: 'Error', status: s }) === true); });
+    check('noRetry 明确错误（网关 200+HTML/200+JSON）不可重试', fn({ name: 'Error', message: 'x', noRetry: true }) === false);
+
+    // ── S10：网关 200+HTML / 200+JSON 的 noRetry 应答 → 不进重试，直接呈现 ──
+    console.log('S10: noRetry 明确错误跳过重试');
+    var h10 = runHarness([
+        { result: { type: 'error', error: { name: 'Error', message: '端点返回了网页而非对话接口（HTTP 200 + text/html）', noRetry: true } } },
+        { result: { type: 'text', content: '不该到达', reasoning: '' } }
+    ]);
+    check('noRetry 不发起第二次请求', h10.attempts() === 1, h10.attempts());
+    check('noRetry 报错直接呈现', h10.chatHistory.length === 1 && h10.chatHistory[0].content === 'Error: 端点返回了网页而非对话接口（HTTP 200 + text/html）', h10.chatHistory);
+    check('noRetry 后无挂起重试任务', h10.clock.pending() === 0);
 
     console.log(failures === 0 ? '\n全部通过 ✓' : '\n失败 ' + failures + ' 项 ✗');
     process.exit(failures === 0 ? 0 : 1);

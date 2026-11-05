@@ -702,6 +702,22 @@
             throw new Error('HTTP ' + response.status + (body ? ' - ' + body.slice(0, 300) : ''));
           });
         }
+        // 与 ai-assistant.html 同一套防护：个别网关用 HTTP 200 应答出错内容
+        // （One API / New API 类中转对不带 /v1 的路径会回控制台 HTML），按流
+        // 解析永远出不了对话分片，直接呈现原因而不是干等。
+        var respCT = String((response.headers && response.headers.get('content-type')) || '');
+        if (/text\/html/i.test(respCT)) {
+          throw new Error(lang === 'zh'
+            ? '端点返回了网页而非对话接口（HTTP 200 + text/html）。One API / New API 类中转的接口地址应带 /v1，例如 https://主机/v1/chat/completions'
+            : 'Endpoint returned a webpage instead of a chat API (HTTP 200 + text/html). One API / New API relay endpoints need /v1, e.g. https://host/v1/chat/completions');
+        }
+        if (/json/i.test(respCT)) {
+          return response.json().then(function (j) {
+            var msg = (j && j.error && (j.error.message || j.error.type)) ||
+              (lang === 'zh' ? '端点返回了 JSON 而非 SSE 流（HTTP 200），请核对接口地址' : 'Endpoint returned JSON instead of an SSE stream (HTTP 200); check the endpoint');
+            throw new Error(msg);
+          });
+        }
         return readSseStream(response.body.getReader(), function (delta) {
           fullText += delta;
           if (!cursor) onFirstDelta();

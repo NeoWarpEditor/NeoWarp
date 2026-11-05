@@ -11,6 +11,12 @@ contextBridge.exposeInMainWorld('AIAssistantPreload', {
   getModelConfigs: () => ipcRenderer.invoke('ai-get-model-configs'),
   saveModelConfigs: (payload) => ipcRenderer.invoke('ai-save-model-configs', payload),
   openDesktopSettings: () => ipcRenderer.invoke('open-desktop-settings'),
+  // AI 工作流设置（Plan / Spec / Goal）：读取/保存/选目录/文档落盘
+  getWorkflowSettings: () => ipcRenderer.invoke('ai-get-workflow-settings'),
+  saveWorkflowSettings: (payload) => ipcRenderer.invoke('ai-save-workflow-settings', payload),
+  pickWorkflowDocsDir: () => ipcRenderer.invoke('ai-pick-workflow-docs-dir'),
+  saveWorkflowDoc: (payload) => ipcRenderer.invoke('ai-save-workflow-doc', payload),
+  openWorkflowDocsDir: () => ipcRenderer.invoke('ai-open-workflow-docs-dir'),
   callTool: (toolName, params) => ipcRenderer.invoke('ai-tool-call', toolName, params),
   webSearch: (query) => ipcRenderer.invoke('web-search', query),
   getTheme: () => ipcRenderer.invoke('ai-get-theme'),
@@ -31,6 +37,9 @@ contextBridge.exposeInMainWorld('AIAssistantPreload', {
   },
   onAiModelConfigsChanged: (callback) => {
     ipcRenderer.on('ai-model-configs-changed', (event, data) => callback(data));
+  },
+  onWorkflowSettingsChanged: (callback) => {
+    ipcRenderer.on('ai-workflow-settings-changed', (event, data) => callback(data));
   },
   onLocaleChanged: (callback) => {
     ipcRenderer.on('ai-locale-changed', (event, data) => callback(data));

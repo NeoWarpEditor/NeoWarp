@@ -4503,6 +4503,575 @@
             color: var(--text-tertiary);
             margin-top: 1px;
         }
+
+        /* ══════════════ AI 工作流（Plan / Spec / Goal）══════════════ */
+
+        /* ── 输入框上方的 "/" 工作流选择弹窗 ── */
+        .workflow-popup {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 0;
+            right: 0;
+            margin: 0 auto;
+            max-width: 460px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            box-shadow: var(--shadow-lg);
+            padding: 6px;
+            z-index: 80;
+            animation: wfPopupIn 0.16s cubic-bezier(0.32, 0.72, 0, 1);
+            overflow: hidden;
+        }
+        @keyframes wfPopupIn {
+            from { opacity: 0; transform: translateY(6px) scale(0.98); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .workflow-popup-header {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            color: var(--text-tertiary);
+            padding: 6px 12px 4px;
+            user-select: none;
+        }
+        .workflow-popup-list { display: flex; flex-direction: column; gap: 1px; }
+        .workflow-popup-item {
+            display: flex;
+            align-items: center;
+            gap: 11px;
+            width: 100%;
+            appearance: none;
+            border: none;
+            outline: none;
+            background: transparent;
+            color: var(--text);
+            font-family: inherit;
+            text-align: left;
+            padding: 8px 11px;
+            border-radius: 11px;
+            cursor: pointer;
+            transition: background 0.12s ease;
+        }
+        .workflow-popup-item.active { background: var(--accent-ghost); }
+        .workflow-popup-item:hover { background: var(--surface-hover); }
+        .workflow-popup-item.active:hover { background: var(--accent-ghost); }
+        .workflow-popup-icon {
+            width: 30px;
+            height: 30px;
+            border-radius: 9px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            color: #fff;
+        }
+        .workflow-popup-icon svg { width: 15px; height: 15px; }
+        .workflow-popup-texts { flex: 1; min-width: 0; }
+        .workflow-popup-name {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: -0.1px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .workflow-popup-name .wf-name-zh {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-tertiary);
+        }
+        .workflow-popup-desc {
+            font-size: 11.5px;
+            color: var(--text-tertiary);
+            margin-top: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .workflow-popup-item .wf-check {
+            width: 15px;
+            height: 15px;
+            flex-shrink: 0;
+            color: var(--accent);
+            opacity: 0;
+        }
+        .workflow-popup-item.selected .wf-check { opacity: 1; }
+        .workflow-popup-empty {
+            padding: 14px 12px;
+            font-size: 12px;
+            color: var(--text-tertiary);
+            text-align: center;
+        }
+
+        /* ── 输入框上方的工作流徽章（下一次发送将使用的工作流）── */
+        .workflow-chip-bar {
+            display: flex;
+            justify-content: flex-start;
+            padding: 0 2px;
+        }
+        .workflow-chip {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            max-width: 100%;
+            padding: 4px 6px 4px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-full);
+            background: var(--surface);
+            box-shadow: var(--shadow-sm);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            animation: wfPopupIn 0.16s ease;
+        }
+        .workflow-chip-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            flex-shrink: 0;
+        }
+        .workflow-chip-mode {
+            font-weight: 500;
+            color: var(--text-tertiary);
+        }
+        .workflow-chip-clear {
+            appearance: none;
+            border: none;
+            outline: none;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: transparent;
+            color: var(--text-tertiary);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            flex-shrink: 0;
+            transition: background 0.12s ease, color 0.12s ease;
+        }
+        .workflow-chip-clear:hover { background: var(--surface-tertiary); color: var(--text); }
+        .workflow-chip-clear svg { width: 11px; height: 11px; }
+
+        /* ── 聊天里的工作流状态卡片（计划/规格确认、目标进度）── */
+        .workflow-card {
+            max-width: 88%;
+            width: 100%;
+            align-self: flex-start;
+            margin: 0 0 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            background: var(--surface);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
+            animation: fadeInUp 0.3s ease-out;
+            flex-shrink: 0;
+        }
+        .workflow-card-head {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 14px;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .workflow-card-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        .workflow-card-icon svg { width: 16px; height: 16px; }
+        .workflow-card-titles { flex: 1; min-width: 0; }
+        .workflow-card-title {
+            font-size: 13.5px;
+            font-weight: 700;
+            letter-spacing: -0.1px;
+            color: var(--text);
+        }
+        .workflow-card-sub {
+            font-size: 11.5px;
+            color: var(--text-tertiary);
+            margin-top: 1px;
+        }
+        .workflow-status-badge {
+            flex-shrink: 0;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 10px;
+            border-radius: var(--radius-full);
+            background: var(--surface-secondary);
+            color: var(--text-secondary);
+        }
+        .workflow-status-badge.awaiting {
+            background: rgba(245, 158, 11, 0.12);
+            color: #b45309;
+        }
+        .dark-mode .workflow-status-badge.awaiting { color: #fbbf24; }
+        .workflow-status-badge.executing {
+            background: rgba(59, 130, 246, 0.12);
+            color: #1d4ed8;
+        }
+        .dark-mode .workflow-status-badge.executing { color: #60a5fa; }
+        .workflow-status-badge.done {
+            background: rgba(16, 185, 129, 0.12);
+            color: #059669;
+        }
+        .dark-mode .workflow-status-badge.done { color: #34d399; }
+        .workflow-status-badge.cancelled {
+            background: var(--surface-tertiary);
+            color: var(--text-tertiary);
+        }
+        /* Spec 模式的进度环 */
+        .workflow-progress-ring {
+            position: relative;
+            width: 34px;
+            height: 34px;
+            flex-shrink: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .workflow-progress-ring svg { position: absolute; inset: 0; width: 34px; height: 34px; }
+        .workflow-progress-num {
+            font-size: 9.5px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            font-variant-numeric: tabular-nums;
+        }
+        .workflow-card-docs {
+            padding: 10px 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .wf-doc-block {
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-sm);
+            background: var(--surface-secondary);
+            overflow: hidden;
+        }
+        .wf-doc-head {
+            display: flex;
+            align-items: center;
+            gap: 7px;
+            width: 100%;
+            appearance: none;
+            border: none;
+            outline: none;
+            background: transparent;
+            font-family: inherit;
+            padding: 8px 11px;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 12px;
+            font-weight: 600;
+            text-align: left;
+        }
+        .wf-doc-head:hover { background: var(--surface-hover); }
+        .wf-doc-head .wf-doc-file {
+            font-family: var(--font-mono);
+            font-size: 11.5px;
+        }
+        .wf-doc-head .wf-doc-count { color: var(--text-tertiary); font-weight: 500; }
+        .wf-doc-chevron {
+            width: 13px;
+            height: 13px;
+            margin-left: auto;
+            flex-shrink: 0;
+            transition: transform var(--transition);
+        }
+        .wf-doc-block.collapsed .wf-doc-chevron { transform: rotate(-90deg); }
+        .wf-doc-body {
+            max-height: 260px;
+            overflow: auto;
+            padding: 2px 12px 10px;
+            font-size: 12.5px;
+            line-height: 1.6;
+            color: var(--text);
+        }
+        .wf-doc-body .md-heading { margin: 8px 0 4px; }
+        .wf-doc-body .md-list { margin: 2px 0 6px; }
+        .wf-doc-block.collapsed .wf-doc-body { display: none; }
+        .wf-doc-body .md-task-done { opacity: 0.55; text-decoration: line-through; }
+        .wf-edited-note {
+            font-size: 11px;
+            color: #b45309;
+            background: rgba(245, 158, 11, 0.1);
+            border-radius: var(--radius-xs);
+            padding: 5px 10px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .dark-mode .wf-edited-note { color: #fbbf24; }
+        .wf-saved-path {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            padding: 0 14px 4px;
+            word-break: break-all;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .wf-saved-path svg { width: 11px; height: 11px; flex-shrink: 0; }
+        .workflow-card-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 14px 13px;
+        }
+        .workflow-card-actions .wf-spacer { flex: 1; }
+        .wf-btn {
+            appearance: none;
+            border: none;
+            outline: none;
+            font-family: inherit;
+            font-size: 12.5px;
+            font-weight: 600;
+            letter-spacing: -0.1px;
+            padding: 8px 16px;
+            border-radius: var(--radius-full);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all var(--transition);
+        }
+        .wf-btn svg { width: 13px; height: 13px; }
+        .wf-btn:active { transform: scale(0.97); }
+        .wf-btn-primary { background: var(--accent); color: #fff; }
+        .wf-btn-primary:hover { background: var(--accent-hover); }
+        .wf-btn-secondary {
+            background: transparent;
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+        .wf-btn-secondary:hover { background: var(--surface-hover); color: var(--text); }
+        .wf-btn-ghost {
+            background: transparent;
+            color: var(--text-tertiary);
+            padding: 8px 12px;
+        }
+        .wf-btn-ghost:hover { color: #ef4444; background: rgba(239, 68, 68, 0.06); }
+        .workflow-goal-round {
+            align-self: flex-start;
+            max-width: 88%;
+            margin: 0 0 8px;
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            padding: 5px 12px;
+            border-radius: var(--radius-full);
+            border: 1px dashed var(--border);
+            background: var(--surface);
+            color: var(--text-tertiary);
+            font-size: 11.5px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+        .workflow-goal-round svg { width: 12px; height: 12px; }
+
+        /* ── 文档编辑弹窗 ── */
+        .wf-edit-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.4);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 250;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px;
+            animation: fadeIn 0.15s ease;
+        }
+        .wf-edit-panel {
+            width: min(680px, 100%);
+            max-height: min(78vh, 720px);
+            display: flex;
+            flex-direction: column;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-xl);
+            overflow: hidden;
+            animation: wfPopupIn 0.18s ease;
+        }
+        .wf-edit-head {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 16px;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .wf-edit-title { font-size: 14px; font-weight: 700; color: var(--text); flex: 1; }
+        .wf-edit-file {
+            font-family: var(--font-mono);
+            font-size: 11.5px;
+            color: var(--text-tertiary);
+            background: var(--surface-secondary);
+            padding: 3px 9px;
+            border-radius: var(--radius-full);
+        }
+        .wf-edit-hint {
+            font-size: 11.5px;
+            color: var(--text-tertiary);
+            padding: 9px 16px 0;
+        }
+        .wf-edit-textarea {
+            flex: 1;
+            min-height: 200px;
+            margin: 10px 16px;
+            padding: 12px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            background: var(--surface-secondary);
+            color: var(--text);
+            font-family: var(--font-mono);
+            font-size: 12.5px;
+            line-height: 1.6;
+            resize: none;
+            outline: none;
+        }
+        .wf-edit-textarea:focus {
+            border-color: var(--accent);
+            box-shadow: 0 0 0 3px var(--accent-ring);
+        }
+        .wf-edit-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 0 16px 14px;
+        }
+
+        /* ── 设置面板里的工作流页 ── */
+        .wf-setting-section {
+            padding: 16px 2px;
+            border-bottom: 1px solid var(--border-light);
+        }
+        .wf-setting-section:last-child { border-bottom: none; }
+        .wf-setting-label {
+            font-size: 13.5px;
+            font-weight: 700;
+            color: var(--text);
+            letter-spacing: -0.1px;
+        }
+        .wf-setting-desc {
+            font-size: 12px;
+            color: var(--text-tertiary);
+            margin-top: 3px;
+            line-height: 1.55;
+        }
+        .wf-options {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        @media (max-width: 560px) { .wf-options { grid-template-columns: 1fr; } }
+        .wf-option {
+            appearance: none;
+            border: 1px solid var(--border);
+            outline: none;
+            background: var(--surface);
+            border-radius: var(--radius);
+            padding: 11px 12px;
+            text-align: left;
+            cursor: pointer;
+            font-family: inherit;
+            color: var(--text);
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            transition: all var(--transition);
+        }
+        .wf-option:hover { background: var(--surface-hover); }
+        .wf-option.selected {
+            border-color: var(--accent);
+            background: var(--accent-ghost);
+            box-shadow: 0 0 0 3px var(--accent-ring);
+        }
+        .wf-option-icon {
+            width: 28px;
+            height: 28px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            flex-shrink: 0;
+        }
+        .wf-option-icon svg { width: 14px; height: 14px; }
+        .wf-option-texts { min-width: 0; }
+        .wf-option-name {
+            font-size: 12.5px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .wf-option-name .wf-zh {
+            font-size: 11px;
+            font-weight: 500;
+            color: var(--text-tertiary);
+        }
+        .wf-option-desc {
+            font-size: 11px;
+            color: var(--text-tertiary);
+            margin-top: 2px;
+            line-height: 1.45;
+        }
+        .wf-dir-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 12px;
+            flex-wrap: wrap;
+        }
+        .wf-dir-path {
+            flex: 1;
+            min-width: 160px;
+            font-size: 12px;
+            font-family: var(--font-mono);
+            color: var(--text-secondary);
+            background: var(--surface-secondary);
+            border: 1px solid var(--border-light);
+            border-radius: var(--radius-xs);
+            padding: 8px 11px;
+            word-break: break-all;
+            line-height: 1.4;
+        }
+        .wf-dir-path.empty { color: var(--text-tertiary); font-family: var(--font-sans); }
+        .wf-dir-btn {
+            appearance: none;
+            border: 1px solid var(--border);
+            outline: none;
+            background: var(--surface);
+            color: var(--text-secondary);
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 8px 13px;
+            border-radius: var(--radius-xs);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all var(--transition);
+            flex-shrink: 0;
+        }
+        .wf-dir-btn svg { width: 13px; height: 13px; }
+        .wf-dir-btn:hover { background: var(--surface-hover); color: var(--text); }
+        .wf-dir-btn:active { transform: scale(0.97); }
+        .wf-dir-clear {
+            border-color: transparent;
+            color: var(--text-tertiary);
+        }
     </style>
     <script src="./qrcode.min.js"></script>
 </head>
@@ -4621,6 +5190,20 @@
         <div class="image-preview-bar" id="filePreviewBar" style="display:none;"></div>
 
         <div class="input-area" id="inputArea">
+            <div class="workflow-popup" id="workflowPopup" style="display:none;">
+                <div class="workflow-popup-header" id="workflowPopupHeader">选择工作流</div>
+                <div class="workflow-popup-list" id="workflowPopupList"></div>
+            </div>
+            <div class="workflow-chip-bar" id="workflowChipBar" style="display:none;">
+                <div class="workflow-chip" id="workflowChip">
+                    <span class="workflow-chip-dot" id="workflowChipDot"></span>
+                    <span id="workflowChipName">Plan</span>
+                    <span class="workflow-chip-mode" id="workflowChipMode"></span>
+                    <button type="button" class="workflow-chip-clear" id="workflowChipClear" title="取消工作流" aria-label="取消工作流">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    </button>
+                </div>
+            </div>
             <div class="solo-project-bar" id="soloProjectBar" style="display:none;">
                 <button class="solo-project-chip" id="soloProjectChip" title="选择工程">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -4780,6 +5363,15 @@
                             </svg>
                             <span class="settings-nav-label" id="settingsNavUsage">使用统计</span>
                         </button>
+                        <button class="settings-nav-item" id="settingsTabWorkflow" type="button" role="tab" aria-selected="false" aria-controls="settingsPaneWorkflow">
+                            <svg class="settings-nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 6h6l2 3h8"></path>
+                                <path d="M4 15h6l2 -3"></path>
+                                <circle cx="19" cy="9" r="2"></circle>
+                                <circle cx="19" cy="17" r="2"></circle>
+                            </svg>
+                            <span class="settings-nav-label" id="settingsNavWorkflow">工作流</span>
+                        </button>
                     </div>
                 </nav>
 
@@ -4843,6 +5435,29 @@
                         <div class="usage-footer">
                             <span class="usage-footnote" id="usageFootnote"></span>
                             <button class="usage-reset-btn" id="usageResetBtn" type="button">清除用量记录</button>
+                        </div>
+                    </div>
+
+                    <div class="settings-pane" id="settingsPaneWorkflow" role="tabpanel">
+                        <div class="wf-setting-section">
+                            <div class="wf-setting-label" id="wfDefaultLabel">默认工作流</div>
+                            <div class="wf-setting-desc" id="wfDefaultDesc">发送消息时默认使用的工作流。你也可以随时在输入框开头输入 / 临时切换；选择「不使用」则按普通对话执行。</div>
+                            <div class="wf-options" id="wfDefaultOptions"></div>
+                        </div>
+                        <div class="wf-setting-section">
+                            <div class="wf-setting-label" id="wfDocsLabel">工作流文档保存位置</div>
+                            <div class="wf-setting-desc" id="wfDocsDesc">Plan / Spec 工作流生成的文档会按任务名分文件夹保存到该目录，可纳入版本控制长期保留。留空则仅保留在当前会话中。</div>
+                            <div class="wf-dir-row">
+                                <span class="wf-dir-path empty" id="wfDocsDirPath">未设置（仅保留在会话中）</span>
+                                <button class="wf-dir-btn" id="wfPickDirBtn" type="button">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"></path></svg>
+                                    <span id="wfPickDirLabel">选择目录</span>
+                                </button>
+                                <button class="wf-dir-btn" id="wfOpenDirBtn" type="button" style="display:none;">
+                                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path><polyline points="15 3 21 3 21 9"></polyline><line x1="10" y1="14" x2="21" y2="3"></line></svg>
+                                    <span id="wfOpenDirLabel">打开目录</span>
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -5748,6 +6363,20 @@
     var currentLocale = 'en';
     var i18nStrings = {};
 
+    // ══ AI 工作流（Plan / Spec / Goal）状态 ══
+    // workflowSettings 来自主进程统一设置（AI 设置页可改）；
+    // pendingWorkflow 是"下一条消息"将使用的工作流，输入 / 可临时切换。
+    var workflowSettings = { workflow: 'none', docsDir: '' };
+    var pendingWorkflow = 'none';
+    // "/" 弹窗状态
+    var wfPopupOpen = false;
+    var wfPopupItems = [];
+    var wfPopupIndex = 0;
+    // 当前展示确认卡片的工作流卡（每会话一张，重建历史时恢复）
+    var activeWorkflowCard = null;
+    // 文档编辑弹窗（同时只存在一个）
+    var wfEditOverlay = null;
+
     var TRANSLATIONS = {
         en: {
             appTitle: 'AI Assistant',
@@ -5949,6 +6578,60 @@
             freeEnded: 'Free offer has ended',
             freeNoKey: 'Free via NeoWarp · no API key needed',
             freeGroupNote: 'Click to switch · no key required · ends Nov 30, 2026, 12:00 (UTC+8)',
+            tabWorkflow: 'Workflow',
+            wfPopupHeader: 'Workflow — send to activate',
+            wfNoneName: 'None',
+            wfNoneMode: 'normal chat',
+            wfNoneDesc: 'No workflow, reply directly',
+            wfPlanName: 'Plan',
+            wfPlanMode: 'plan mode',
+            wfPlanDesc: 'Draft a plan doc first; execute step by step after your confirmation',
+            wfSpecName: 'Spec',
+            wfSpecMode: 'spec mode',
+            wfSpecDesc: 'Generate spec.md / tasks.md / checklist.md, then execute after confirmation',
+            wfGoalName: 'Goal',
+            wfGoalMode: 'goal mode',
+            wfGoalDesc: 'Define a completion goal; auto-continues until the goal is reached',
+            wfChipClearTitle: 'Stop workflow',
+            wfCardPlanTitle: 'Plan ready for review',
+            wfCardSpecTitle: 'Documents ready for review',
+            wfCardAwaitingSub: 'Nothing runs until you confirm',
+            wfCardExecutingSub: 'Executing — send messages anytime to adjust',
+            wfCardPlanDoneTitle: 'Plan completed',
+            wfCardSpecDoneTitle: 'All tasks completed',
+            wfCardCancelledTitle: 'Workflow cancelled',
+            wfCardGoalTitle: 'Goal in progress',
+            wfCardGoalSub: 'Goal workflow · auto-continues each round',
+            wfCardGoalDoneTitle: 'Goal achieved',
+            wfCardGoalDoneSub: 'The agent evaluated the goal as completed',
+            wfCardGoalMaxTitle: 'Stopped at max rounds',
+            wfCardGoalMaxSub: 'Reached the round limit ({n}); send a message to continue',
+            wfBtnApprove: 'Approve & run',
+            wfBtnEdit: 'Edit doc',
+            wfBtnCancel: 'Cancel',
+            wfBtnView: 'View docs',
+            wfEditedNote: 'Edited manually — the agent will follow the latest content',
+            wfSavedTo: 'Saved to',
+            wfEditTitle: 'Edit workflow document',
+            wfEditHint: 'Markdown supported. After saving, the agent will follow the latest document.',
+            wfToastApproved: 'Approved — started executing',
+            wfToastEdited: 'Document updated',
+            wfToastCancelled: 'Workflow cancelled',
+            wfToastDocFail: 'Failed to save document to disk',
+            wfToastWorkflowOn: '{name} workflow activated for the next message',
+            wfToastWorkflowOff: 'Workflow cleared',
+            wfGoalRound: 'Goal auto-continue · round {n}',
+            wfGoalRoundDone: 'Round {n} finished · goal not reached yet',
+            wfDirUnset: 'Not set (kept in chats only)',
+            wfDirPick: 'Choose folder',
+            wfDirOpen: 'Open folder',
+            wfSettingsSaved: 'Workflow settings saved',
+            wfSettingsDefaultLabel: 'Default workflow',
+            wfSettingsDefaultDesc: 'The workflow applied to outgoing messages by default. Type / at the start of the input box to switch any time; pick "None" for plain chat.',
+            wfSettingsDocsLabel: 'Workflow document folder',
+            wfSettingsDocsDesc: 'Documents generated by Plan / Spec workflows are saved here, grouped in folders by task name, ready for version control. Leave empty to keep them in chats only.',
+            wfSpecProgress: '{done}/{total} tasks',
+            wfCancelConfirm: 'Cancel this workflow? Generated documents stay in the chat.',
         },
         zh: {
             appTitle: 'AI 助手',
@@ -6150,6 +6833,60 @@
             freeEnded: '免费使用活动已结束',
             freeNoKey: 'NeoWarp 免费提供 · 无需 API Key',
             freeGroupNote: '点击即可切换 · 无需密钥 · 活动截止 2026年11月30日 12:00',
+            tabWorkflow: '工作流',
+            wfPopupHeader: '选择工作流 · 发送后生效',
+            wfNoneName: '不使用',
+            wfNoneMode: '普通对话',
+            wfNoneDesc: '退出工作流，直接回复',
+            wfPlanName: 'Plan',
+            wfPlanMode: '计划模式',
+            wfPlanDesc: '先生成计划文档，确认后按步骤逐项执行',
+            wfSpecName: 'Spec',
+            wfSpecMode: '规格模式',
+            wfSpecDesc: '生成 spec / tasks / checklist 三份文档，确认后按任务执行',
+            wfGoalName: 'Goal',
+            wfGoalMode: '目标模式',
+            wfGoalDesc: '设定完成条件，AI 自动多轮推进直到目标达成',
+            wfChipClearTitle: '取消工作流',
+            wfCardPlanTitle: '计划已生成，等待确认',
+            wfCardSpecTitle: '文档已生成，等待确认',
+            wfCardAwaitingSub: '确认前不会执行任何操作',
+            wfCardExecutingSub: '执行中 · 随时发消息调整',
+            wfCardPlanDoneTitle: '计划已全部完成',
+            wfCardSpecDoneTitle: '全部任务已完成',
+            wfCardCancelledTitle: '工作流已取消',
+            wfCardGoalTitle: '目标推进中',
+            wfCardGoalSub: 'Goal 工作流 · 每轮自动评估并续跑',
+            wfCardGoalDoneTitle: '目标达成',
+            wfCardGoalDoneSub: '智能体已评估确认完成条件全部满足',
+            wfCardGoalMaxTitle: '已达到最大轮数，自动停止',
+            wfCardGoalMaxSub: '已连续推进 {n} 轮；继续请直接发送消息',
+            wfBtnApprove: '确认执行',
+            wfBtnEdit: '编辑文档',
+            wfBtnCancel: '取消',
+            wfBtnView: '查看文档',
+            wfEditedNote: '文档已被手动编辑，将按最新内容执行',
+            wfSavedTo: '已保存到',
+            wfEditTitle: '编辑工作流文档',
+            wfEditHint: '支持 Markdown。保存后智能体会按最新文档执行。',
+            wfToastApproved: '已确认，开始执行',
+            wfToastEdited: '文档已更新',
+            wfToastCancelled: '已取消工作流',
+            wfToastDocFail: '文档保存到磁盘失败',
+            wfToastWorkflowOn: '下一条消息将使用 {name} 工作流',
+            wfToastWorkflowOff: '已退出工作流',
+            wfGoalRound: 'Goal 自动续跑 · 第 {n} 轮',
+            wfGoalRoundDone: '第 {n} 轮结束 · 目标尚未达成',
+            wfDirUnset: '未设置（仅保留在会话中）',
+            wfDirPick: '选择目录',
+            wfDirOpen: '打开目录',
+            wfSettingsSaved: '工作流设置已保存',
+            wfSettingsDefaultLabel: '默认工作流',
+            wfSettingsDefaultDesc: '发送消息时默认使用的工作流。你也可以随时在输入框开头输入 / 临时切换；选择「不使用」则按普通对话执行。',
+            wfSettingsDocsLabel: '工作流文档保存位置',
+            wfSettingsDocsDesc: 'Plan / Spec 工作流生成的文档会按任务名分文件夹保存到该目录，可纳入版本控制长期保留。留空则仅保留在当前会话中。',
+            wfSpecProgress: '{done}/{total} 任务',
+            wfCancelConfirm: '取消当前工作流？已生成的文档仍保留在对话中。'
         }
     };
     TRANSLATIONS['zh-CN'] = TRANSLATIONS.zh;
@@ -6202,9 +6939,9 @@
         if (welcomeSubtitleEl) welcomeSubtitleEl.innerHTML = t('welcomeSubtitle');
         renderWelcomeTags();
         var settingsTitleEl = document.querySelector('.settings-title');
-        if (settingsTitleEl) settingsTitleEl.textContent = settingsTab === 'usage' ? t('tabUsage') : t('modelSettings');
+        if (settingsTitleEl) settingsTitleEl.textContent = settingsTab === 'usage' ? t('tabUsage') : (settingsTab === 'workflow' ? t('tabWorkflow') : t('modelSettings'));
         var settingsSubtitleEl = document.getElementById('settingsSubtitle');
-        if (settingsSubtitleEl) settingsSubtitleEl.textContent = settingsTab === 'usage' ? t(IS_REMOTE ? 'usageSubtitleRemote' : 'usageSubtitle') : t('settingsSubtitle');
+        if (settingsSubtitleEl) settingsSubtitleEl.textContent = settingsTab === 'usage' ? t(IS_REMOTE ? 'usageSubtitleRemote' : 'usageSubtitle') : (settingsTab === 'workflow' ? '' : t('settingsSubtitle'));
         var settingsNavTitleEl = document.getElementById('settingsNavTitle');
         if (settingsNavTitleEl) settingsNavTitleEl.textContent = t('settingsNavTitle');
         // 窄屏下目录只剩图标，把文案挂到 title 上仍可读
@@ -6212,10 +6949,30 @@
         if (navModelsEl) navModelsEl.textContent = t('tabModels');
         var navUsageEl = document.getElementById('settingsNavUsage');
         if (navUsageEl) navUsageEl.textContent = t('tabUsage');
+        var navWorkflowEl = document.getElementById('settingsNavWorkflow');
+        if (navWorkflowEl) navWorkflowEl.textContent = t('tabWorkflow');
         var tabModelsEl = document.getElementById('settingsTabModels');
         if (tabModelsEl) tabModelsEl.title = t('tabModels');
         var tabUsageEl = document.getElementById('settingsTabUsage');
         if (tabUsageEl) tabUsageEl.title = t('tabUsage');
+        var tabWorkflowEl = document.getElementById('settingsTabWorkflow');
+        if (tabWorkflowEl) tabWorkflowEl.title = t('tabWorkflow');
+        // 工作流设置页与设置面板标签跟随语言刷新
+        var wfDefaultLabelEl = document.getElementById('wfDefaultLabel');
+        if (wfDefaultLabelEl) wfDefaultLabelEl.textContent = t('wfSettingsDefaultLabel');
+        var wfDefaultDescEl = document.getElementById('wfDefaultDesc');
+        if (wfDefaultDescEl) wfDefaultDescEl.textContent = t('wfSettingsDefaultDesc');
+        var wfDocsLabelEl = document.getElementById('wfDocsLabel');
+        if (wfDocsLabelEl) wfDocsLabelEl.textContent = t('wfSettingsDocsLabel');
+        var wfDocsDescEl = document.getElementById('wfDocsDesc');
+        if (wfDocsDescEl) wfDocsDescEl.textContent = t('wfSettingsDocsDesc');
+        var wfPickDirLabelEl = document.getElementById('wfPickDirLabel');
+        if (wfPickDirLabelEl) wfPickDirLabelEl.textContent = t('wfDirPick');
+        var wfOpenDirLabelEl = document.getElementById('wfOpenDirLabel');
+        if (wfOpenDirLabelEl) wfOpenDirLabelEl.textContent = t('wfDirOpen');
+        renderWorkflowSettingsPane();
+        renderWorkflowChip();
+        if (wfPopupOpen) wfRenderPopup();
         var RANGE_KEYS = { today: 'usageToday', '7d': 'usage7d', '30d': 'usage30d' };
         document.querySelectorAll('.usage-range-btn').forEach(function(b) {
             b.textContent = t(RANGE_KEYS[b.getAttribute('data-range')] || 'usageToday');
@@ -6337,6 +7094,10 @@
         try { setupThinkingSlider(); } catch(e) { console.error('setupThinkingSlider error:', e); }
         try { updateThinkingControlVisibility(); } catch(e) { console.error('updateThinkingControlVisibility error:', e); }
         try { initLiquidGlass(); } catch(e) { console.error('initLiquidGlass error:', e); }
+        // AI 工作流：读取统一设置（默认工作流 + 文档目录）、绑定设置页事件、渲染徽章
+        try { loadWorkflowSettings(); } catch(e) { console.error('loadWorkflowSettings error:', e); }
+        try { setupWorkflowSettingsEvents(); } catch(e) { console.error('setupWorkflowSettingsEvents error:', e); }
+        try { renderWorkflowChip(); } catch(e) { console.error('renderWorkflowChip error:', e); }
         if (IS_SOLO) {
             try { initSolo(); } catch(e) { console.error('initSolo error:', e); }
         }
@@ -6719,7 +7480,7 @@
                     return m;
                 });
             }
-            return { id: c.id, title: c.title, messages: msgs, createdAt: c.createdAt, updatedAt: c.updatedAt, undo: c.undo };
+            return { id: c.id, title: c.title, messages: msgs, createdAt: c.createdAt, updatedAt: c.updatedAt, undo: c.undo, workflow: c.workflow };
         });
         return JSON.stringify({
             conversations: mapped,
@@ -6734,7 +7495,7 @@
         try {
             var payload = JSON.stringify({
                 conversations: conversations.map(function(c) {
-                    return { id: c.id, title: c.title, messages: (c.messages || []).map(sanitizeMessageForStorage), createdAt: c.createdAt, updatedAt: c.updatedAt, undo: c.undo };
+                    return { id: c.id, title: c.title, messages: (c.messages || []).map(sanitizeMessageForStorage), createdAt: c.createdAt, updatedAt: c.updatedAt, undo: c.undo, workflow: c.workflow };
                 }),
                 activeConversationId: activeConversationId,
                 nextConversationId: nextConversationId
@@ -7473,10 +8234,11 @@
     }
 
     function setSettingsTab(tab) {
-        settingsTab = tab === 'usage' ? 'usage' : 'models';
+        settingsTab = ['usage', 'workflow'].indexOf(tab) >= 0 ? tab : 'models';
         var pairs = [
             ['settingsTabModels', 'settingsPaneModels', 'models'],
-            ['settingsTabUsage', 'settingsPaneUsage', 'usage']
+            ['settingsTabUsage', 'settingsPaneUsage', 'usage'],
+            ['settingsTabWorkflow', 'settingsPaneWorkflow', 'workflow']
         ];
         pairs.forEach(function(p) {
             var btn = document.getElementById(p[0]);
@@ -7486,13 +8248,14 @@
             if (pane) pane.classList.toggle('active', on);
         });
         var titleEl = document.getElementById('settingsTitle');
-        if (titleEl) titleEl.textContent = settingsTab === 'usage' ? t('tabUsage') : t('modelSettings');
+        if (titleEl) titleEl.textContent = settingsTab === 'usage' ? t('tabUsage') : (settingsTab === 'workflow' ? t('tabWorkflow') : t('modelSettings'));
         var subtitle = document.getElementById('settingsSubtitle');
-        if (subtitle) subtitle.textContent = settingsTab === 'usage' ? t(IS_REMOTE ? 'usageSubtitleRemote' : 'usageSubtitle') : t('settingsSubtitle');
+        if (subtitle) subtitle.textContent = settingsTab === 'usage' ? t(IS_REMOTE ? 'usageSubtitleRemote' : 'usageSubtitle') : (settingsTab === 'workflow' ? '' : t('settingsSubtitle'));
         // 切换分类时内容区回到顶部，否则会停在上一页的滚动位置
         var content = document.getElementById('settingsContent');
         if (content) content.scrollTop = 0;
         if (settingsTab === 'usage') renderUsage();
+        if (settingsTab === 'workflow') renderWorkflowSettingsPane();
     }
 
     /** 目录里的模型计数徽标 */
@@ -8504,7 +9267,9 @@
         if (!chatHistory.length || isViewingGeneratingConv()) return;
         if (IS_REMOTE) { remoteSend('clearChat'); return; }
         chatHistory = [];
-        // 清空对话连带清掉侧边栏待办面板
+        // 清空对话连带清掉工作流状态与侧边栏待办面板
+        var clearedConv = getActiveConv();
+        if (clearedConv && clearedConv.workflow) delete clearedConv.workflow;
         if (activeConversationId) delete sidebarTodoState[activeConversationId];
         welcomeMessage.style.display = 'flex';
         renderChatHistory();
@@ -8588,7 +9353,9 @@
     }
 
     function formatMarkdown(t) {
-        var html = escapeHtml(t);
+        // 工作流标记（计划/规格文档包裹符、目标状态等）只进会话账本，展示时剥离
+        var text = wfStripMarkers(t);
+        var html = escapeHtml(text);
         html = html.replace(/```(\w*)\n?([\s\S]*?)```/g, function(match, lang, code) {
             var langLower = (lang || '').toLowerCase();
             var trimmedCode = code.trimEnd();
@@ -8856,10 +9623,11 @@
     }
 
     function renderChatHistory() {
-        chatArea.querySelectorAll('.message-wrapper, .reasoning-box, .skill-box, .todo-card, .question-card, .process-group').forEach(function(m) { m.remove(); });
+        chatArea.querySelectorAll('.message-wrapper, .reasoning-box, .skill-box, .todo-card, .question-card, .process-group, .workflow-card, .workflow-goal-round').forEach(function(m) { m.remove(); });
         activeTodoCard = null;
         activeTodoStepBody = null;
         activeQuestionCard = null;
+        activeWorkflowCard = null;
         // 注意：activeQuestionResolver 不能在这里清——它挂着 ask_user 工具的
         // 未决 Promise，属于运行中的回合而非当前视图。切走再切回来时问题卡
         // 会经 appendAIMessage 重建，点选后仍要靠这个 resolver 把答案送回去；
@@ -8894,6 +9662,8 @@
         finalizeProcessGroup();
         // 历史重放会重建所有总结脚注，按当前撤销状态补上按钮
         renderUndoButtons();
+        // 会话带工作流时恢复状态卡片（待确认 / 执行中 / 已完成）
+        restoreWorkflowCard();
         scrollToBottom();
         if (typeof phonePushHistory === 'function') phonePushHistory();
     }
@@ -8925,12 +9695,16 @@
 
     function appendUserMessage(content, time, images, animate) {
         welcomeMessage.style.display = 'none';
+        // 工作流指令前缀只发往 API，历史重放时在气泡里剥掉
+        var displayText = String(content || '')
+            .replace(/^\[NEOWARP_WORKFLOW:\w+\][^\n]*\n+/, '')
+            .replace(/^\[(?:PLAN_APPROVED|SPEC_APPROVED|GOAL_CONTINUE)\]\s*/, '');
         var wrapper = document.createElement('div');
         wrapper.className = 'message-wrapper user';
         if (animate) wrapper.style.animation = 'fadeInUp 0.35s ease-out';
         var bubble = document.createElement('div');
         bubble.className = 'message-bubble';
-        bubble.innerHTML = escapeHtml(content).replace(/\n/g, '<br>');
+        bubble.innerHTML = escapeHtml(displayText).replace(/\n/g, '<br>');
 
         if (images && images.length > 0) {
             var imgContainer = document.createElement('div');
@@ -9709,15 +10483,992 @@
             'Reply in ' + lang + '.';
     }
 
-    function buildSystemPrompt() {
+    // ═════════════════════════════════════════════════════════════════
+    // AI 工作流引擎（Plan / Spec / Goal）
+    //
+    // 三种工作流共用一套状态机：会话对象上挂 conv.workflow =
+    // { mode, status, taskName, planDoc, docs:{spec,tasks,checklist},
+    //   goal:{text,round,maxRounds} }
+    // status: drafting(生成中) → awaiting(等待确认) → executing(执行中)
+    //         → completed / cancelled；goal 模式无确认环节，直接 running。
+    //
+    // 与模型的协议（系统提示里约定，模型在回复中输出标记）：
+    //  Plan 文档:  <!--NEOWARP_PLAN--> ... <!--/NEOWARP_PLAN-->
+    //  Spec 文档:  <!--NEOWARP_SPEC--> / <!--NEOWARP_TASKS--> /
+    //              <!--NEOWARP_CHECKLIST--> 三段
+    //  目标状态:   [GOAL_STATUS:achieved] / [GOAL_STATUS:not_achieved]
+    //  进度标记:   [TASK_DONE:n] [CHECK_DONE:n] [PLAN_COMPLETE] [SPEC_COMPLETE]
+    // 标记在 formatMarkdown 里统一剥离，聊天里永远看不到原文。
+    // ═════════════════════════════════════════════════════════════════
+
+    var WF_PLAN_BEGIN = '<!--NEOWARP_PLAN-->';
+    var WF_PLAN_END = '<!--/NEOWARP_PLAN-->';
+    var WF_SPEC_BEGIN = '<!--NEOWARP_SPEC-->';
+    var WF_SPEC_END = '<!--/NEOWARP_SPEC-->';
+    var WF_TASKS_BEGIN = '<!--NEOWARP_TASKS-->';
+    var WF_TASKS_END = '<!--/NEOWARP_TASKS-->';
+    var WF_CHECKLIST_BEGIN = '<!--NEOWARP_CHECKLIST-->';
+    var WF_CHECKLIST_END = '<!--/NEOWARP_CHECKLIST-->';
+    var WF_GOAL_MAX_ROUNDS = 20;
+
+    var WORKFLOW_DEFS = {
+        none: {
+            color: '#8e8e93',
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><line x1="5.5" y1="5.5" x2="18.5" y2="18.5"></line></svg>'
+        },
+        plan: {
+            color: '#3b82f6',
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"></rect><line x1="8" y1="8" x2="16" y2="8"></line><line x1="8" y1="12" x2="16" y2="12"></line><line x1="8" y1="16" x2="12" y2="16"></line></svg>'
+        },
+        spec: {
+            color: '#8b5cf6',
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><polyline points="9 15 11 17 15 13"></polyline></svg>'
+        },
+        goal: {
+            color: '#f59e0b',
+            icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="5"></circle><circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"></circle></svg>'
+        }
+    };
+
+    function wfDef(mode) {
+        return WORKFLOW_DEFS[mode] || WORKFLOW_DEFS.none;
+    }
+    function wfName(mode) {
+        if (mode === 'plan') return t('wfPlanName');
+        if (mode === 'spec') return t('wfSpecName');
+        if (mode === 'goal') return t('wfGoalName');
+        return t('wfNoneName');
+    }
+    function wfModeLabel(mode) {
+        if (mode === 'plan') return t('wfPlanMode');
+        if (mode === 'spec') return t('wfSpecMode');
+        if (mode === 'goal') return t('wfGoalMode');
+        return t('wfNoneMode');
+    }
+    function wfFormat(key, vars) {
+        var s = t(key);
+        Object.keys(vars || {}).forEach(function(k) {
+            s = s.split('{' + k + '}').join(vars[k]);
+        });
+        return s;
+    }
+
+    function getActiveConv() {
+        return conversations.find(function(c) { return c.id === activeConversationId; }) || null;
+    }
+
+    /** 确保会话的 workflow 字段结构完整（兼容旧会话） */
+    function normalizeWorkflow(wf) {
+        if (!wf || typeof wf !== 'object') return null;
+        if (wf.mode !== 'plan' && wf.mode !== 'spec' && wf.mode !== 'goal') return null;
+        if (['drafting', 'awaiting', 'executing', 'running', 'completed', 'cancelled'].indexOf(wf.status) < 0) {
+            wf.status = 'completed';
+        }
+        if (typeof wf.taskName !== 'string') wf.taskName = '';
+        if (typeof wf.planDoc !== 'string') wf.planDoc = '';
+        if (!wf.docs || typeof wf.docs !== 'object') wf.docs = { spec: '', tasks: '', checklist: '' };
+        if (!wf.goal || typeof wf.goal !== 'object') wf.goal = { text: '', round: 0, maxRounds: WF_GOAL_MAX_ROUNDS };
+        if (!wf.goal.maxRounds) wf.goal.maxRounds = WF_GOAL_MAX_ROUNDS;
+        if (typeof wf.goal.round !== 'number') wf.goal.round = 0;
+        if (!wf.savedPaths || typeof wf.savedPaths !== 'object') wf.savedPaths = {};
+        if (wf.edited === undefined) wf.edited = false;
+        return wf;
+    }
+
+    // ── 标记解析 ──
+    function wfExtractBlock(content, begin, end) {
+        if (!content) return null;
+        var i = content.indexOf(begin);
+        if (i < 0) return null;
+        var j = content.indexOf(end, i + begin.length);
+        var body = j >= 0 ? content.substring(i + begin.length, j) : content.substring(i + begin.length);
+        return body.trim();
+    }
+    function wfStripMarkers(content) {
+        if (!content) return content;
+        return content
+            .replace(new RegExp(WF_PLAN_BEGIN + '[\\s\\S]*?' + WF_PLAN_END, 'g'), '')
+            .replace(new RegExp(WF_PLAN_BEGIN + '[\\s\\S]*', 'g'), '')
+            .replace(new RegExp(WF_SPEC_BEGIN + '[\\s\\S]*?' + WF_SPEC_END, 'g'), '')
+            .replace(new RegExp(WF_TASKS_BEGIN + '[\\s\\S]*?' + WF_TASKS_END, 'g'), '')
+            .replace(new RegExp(WF_CHECKLIST_BEGIN + '[\\s\\S]*?' + WF_CHECKLIST_END, 'g'), '')
+            .replace(/\[GOAL_STATUS:(achieved|not_achieved)\]/g, '')
+            .replace(/\[TASK_DONE:\d+\]/g, '')
+            .replace(/\[CHECK_DONE:\d+\]/g, '')
+            .replace(/\[PLAN_COMPLETE\]/g, '')
+            .replace(/\[SPEC_COMPLETE\]/g, '');
+    }
+    function wfCountCheckboxes(md) {
+        var total = 0, done = 0;
+        String(md || '').replace(/^(\s*)- \[(x|X| |)\]/gm, function(m, ind, mark) {
+            total++;
+            if (mark.toLowerCase() === 'x') done++;
+            return m;
+        });
+        return { total: total, done: done };
+    }
+    /** 勾上文档中第 n 个（1-based，按出现顺序）复选框；已勾选的重复勾选无副作用 */
+    function wfCheckNthBox(md, n) {
+        var lines = String(md || '').split('\n');
+        var seen = 0;
+        for (var i = 0; i < lines.length; i++) {
+            var m = lines[i].match(/^(\s*)- \[(?: |x|X)\](.*)$/);
+            if (m) {
+                seen++;
+                if (seen === n) {
+                    lines[i] = m[1] + '- [x]' + m[2];
+                    break;
+                }
+            }
+        }
+        return lines.join('\n');
+    }
+
+    // ── 文档落盘（经主进程写入 docsDir/<任务名>/<file>）──
+    function wfSaveDocToDisk(wf, file, content) {
+        if (!workflowSettings.docsDir || !window.AIAssistantPreload || !AIAssistantPreload.saveWorkflowDoc) return;
+        AIAssistantPreload.saveWorkflowDoc({ folder: wf.taskName, file: file, content: content }).then(function(res) {
+            if (res && res.success && wf.savedPaths) wf.savedPaths[file] = res.path;
+            if (res && res.success) {
+                saveCurrentConversation();
+            } else if (res && !res.canceled && res.error && res.error !== 'docs dir not set') {
+                showToast(t('wfToastDocFail'), 'error');
+            }
+        }).catch(function() {});
+    }
+    function wfSaveAllDocs(wf) {
+        if (!workflowSettings.docsDir) return;
+        if (!wf.savedPaths) wf.savedPaths = {};
+        if (wf.mode === 'plan' && wf.planDoc) wfSaveDocToDisk(wf, 'plan.md', wf.planDoc);
+        if (wf.mode === 'spec') {
+            if (wf.docs.spec) wfSaveDocToDisk(wf, 'spec.md', wf.docs.spec);
+            if (wf.docs.tasks) wfSaveDocToDisk(wf, 'tasks.md', wf.docs.tasks);
+            if (wf.docs.checklist) wfSaveDocToDisk(wf, 'checklist.md', wf.docs.checklist);
+        }
+    }
+    /** 从文档第一级标题 / 会话标题推导任务名（作为磁盘文件夹名） */
+    function wfDeriveTaskName(wf, conv) {
+        if (wf.taskName) return wf.taskName;
+        var source = '';
+        var docs = wf.mode === 'plan' ? [wf.planDoc] : [wf.docs.spec, wf.planDoc];
+        for (var i = 0; i < docs.length; i++) {
+            var m = String(docs[i] || '').match(/^#\s+(.+)$/m);
+            if (m) { source = m[1]; break; }
+        }
+        if (!source && conv && conv.title) source = conv.title;
+        wf.taskName = String(source || '工作流任务').replace(/[\\/:*?"<>|#]/g, '').trim().slice(0, 60) || '工作流任务';
+        return wf.taskName;
+    }
+
+    // ── 提示词注入 ──
+    function buildWorkflowPromptSection(wf) {
+        if (!wf) return '';
+        var s = '\n\n=== ACTIVE WORKFLOW: ' + wf.mode.toUpperCase() + ' (STRICT RULES) ===\n';
+        if (wf.mode === 'plan') {
+            if (wf.status === 'drafting' || wf.status === 'awaiting') {
+                s += [
+                    'You are in PLAN workflow. The user just stated a requirement.',
+                    '1. You MAY inspect the project with READ-ONLY tools (get_project_info, get_sprite_scripts, list_sprites, get_installed_extensions...).',
+                    '2. Then output a plan document wrapped EXACTLY like this (HTML comments included, markdown inside):',
+                    WF_PLAN_BEGIN,
+                    '# 计划：<一句话标题>',
+                    '## 目标',
+                    '<要达成什么>',
+                    '## 步骤',
+                    '1. <步骤一：具体做什么、改哪里>',
+                    '2. <步骤二>',
+                    '...',
+                    '## 涉及对象',
+                    '<角色/变量/扩展等>',
+                    WF_PLAN_END,
+                    '3. After the plan, write ONE short sentence asking the user to review it. Then STOP.',
+                    '4. Do NOT execute any modifying tool call (no execute_operations / add_script / write_js_file ...) until the user approves. Approval arrives as a [PLAN_APPROVED] message from the system.',
+                    '5. If the user asks for changes while waiting for approval, output an UPDATED full plan with the same markers, then stop again.'
+                ].join('\n');
+            } else if (wf.status === 'executing') {
+                s += [
+                    'You are in PLAN workflow, EXECUTING phase. The user already approved the plan below.',
+                    '- Follow the plan steps strictly, one at a time, reporting progress briefly after each.',
+                    '- If the user sends new instructions mid-way, adapt the plan accordingly and keep executing.',
+                    '- When EVERY step is done, end your reply with the marker [PLAN_COMPLETE] on its own line.'
+                ].join('\n');
+            }
+        } else if (wf.mode === 'spec') {
+            if (wf.status === 'drafting' || wf.status === 'awaiting') {
+                s += [
+                    'You are in SPEC workflow. The user just stated a requirement.',
+                    '1. You MAY inspect the project with READ-ONLY tools first.',
+                    '2. Then output THREE documents, each wrapped EXACTLY like this (HTML comments included):',
+                    WF_SPEC_BEGIN,
+                    '# 需求大纲 (spec.md)',
+                    '<背景 / 目标 / 功能点 / 边界>',
+                    WF_SPEC_END,
+                    WF_TASKS_BEGIN,
+                    '# 任务列表 (tasks.md)',
+                    '- [ ] 任务 1：<具体可执行的任务>',
+                    '- [ ] 任务 2：...',
+                    WF_TASKS_END,
+                    WF_CHECKLIST_BEGIN,
+                    '# 验收清单 (checklist.md)',
+                    '- [ ] 验收项 1：<可验证的完成标准>',
+                    '- [ ] 验收项 2：...',
+                    WF_CHECKLIST_END,
+                    '3. After the documents, write ONE short sentence asking the user to review. Then STOP.',
+                    '4. Do NOT execute any modifying tool call until the user approves (approval arrives as a [SPEC_APPROVED] message).',
+                    '5. If the user requests adjustments while waiting, output the UPDATED documents again with the same markers, then stop.'
+                ].join('\n');
+            } else if (wf.status === 'executing') {
+                s += [
+                    'You are in SPEC workflow, EXECUTING phase. Execute tasks from tasks.md in order.',
+                    '- Complete ONE task per reply batch where possible, then end that reply with [TASK_DONE:<任务序号>] (e.g. [TASK_DONE:2]).',
+                    '- After verifying an acceptance item from checklist.md, also output [CHECK_DONE:<验收项序号>].',
+                    '- The system checks these markers off in tasks.md / checklist.md automatically; do not re-print whole documents.',
+                    '- If the user sends new instructions mid-way, adapt and keep executing.',
+                    '- When ALL tasks AND acceptance items are done, end with [SPEC_COMPLETE] on its own line.'
+                ].join('\n');
+            }
+        } else if (wf.mode === 'goal') {
+            s += [
+                'You are in GOAL workflow (autonomous multi-round mode).',
+                'GOAL (completion condition): ' + (wf.goal.text || '（即用户最近一条需求本身）'),
+                'Rules:',
+                '- Work towards the goal with tool calls in every round.',
+                '- At the END of EVERY reply you MUST output EXACTLY one status line:',
+                '  [GOAL_STATUS:achieved] — if the goal is fully satisfied (verify with tools before claiming),',
+                '  [GOAL_STATUS:not_achieved] — otherwise, together with a one-line note of what remains.',
+                '- When not achieved, the system will automatically start your next round; always state the next concrete step before the status line.',
+                '- Do not ask the user questions unless truly blocked; prefer verifying by yourself.',
+                '- After outputting [GOAL_STATUS:achieved], summarize what was accomplished.'
+            ].join('\n');
+        }
+        return s;
+    }
+
+    /**
+     * 发往 API 的用户消息前缀：标记本条消息处于哪个工作流阶段。
+     * 只进入 API 内容与会话账本，聊天气泡仍显示原始文本。
+     */
+    function wfOutgoingDirective(wf) {
+        if (!wf) return '';
+        if (wf.mode === 'goal') {
+            if (wf.goal.round === 0 && wf.status === 'running') {
+                return '[NEOWARP_WORKFLOW:goal] 完成条件即本条需求本身。请严格遵守系统提示中的 GOAL 工作流规则，在回复末尾输出状态标记。\n\n';
+            }
+            return '[NEOWARP_WORKFLOW:goal] 用户在目标推进中发来了新消息（完成条件不变）。\n\n';
+        }
+        if (wf.status === 'drafting') {
+            return '[NEOWARP_WORKFLOW:' + wf.mode + '] 本条需求启动 ' + wf.mode.toUpperCase() + ' 工作流。请严格遵守系统提示中的工作流规则：先产出文档并等待确认，不要执行修改操作。\n\n';
+        }
+        if (wf.status === 'awaiting') {
+            return '[NEOWARP_WORKFLOW:' + wf.mode + '] 用户在等待确认期间发来了新消息；请按规则输出更新后的完整文档（用相同标记包裹），继续等待确认。\n\n';
+        }
+        return '[NEOWARP_WORKFLOW:' + wf.mode + '] 用户在执行阶段发来了新消息，请结合当前工作流处理。\n\n';
+    }
+
+    /** 工作流内部合成消息（确认执行 / Goal 自动续跑）统一入口 */
+    function sendSyntheticWorkflowMessage(content, display, convId) {
+        sendMessage(null, { content: content, display: display, convId: convId });
+    }
+
+    // ── "/" 工作流选择弹窗 ──
+    function wfPopupBuildItems(query) {
+        var modes = ['goal', 'spec', 'plan', 'none'];
+        var q = String(query || '').trim().toLowerCase();
+        var defs = {
+            goal: { name: t('wfGoalName'), zh: t('wfGoalMode'), desc: t('wfGoalDesc') },
+            spec: { name: t('wfSpecName'), zh: t('wfSpecMode'), desc: t('wfSpecDesc') },
+            plan: { name: t('wfPlanName'), zh: t('wfPlanMode'), desc: t('wfPlanDesc') },
+            none: { name: t('wfNoneName'), zh: t('wfNoneMode'), desc: t('wfNoneDesc') }
+        };
+        var items = modes.map(function(m) {
+            var d = defs[m];
+            return {
+                mode: m,
+                name: d.name,
+                zh: d.zh,
+                desc: d.desc,
+                haystack: (d.name + ' ' + d.zh + ' ' + m).toLowerCase()
+            };
+        });
+        if (q) {
+            var filtered = items.filter(function(it) { return it.haystack.indexOf(q) >= 0; });
+            if (filtered.length) return filtered;
+            // 无匹配时回退到全部，避免用户被卡住
+            return items;
+        }
+        return items;
+    }
+    function wfRenderPopup() {
+        var list = document.getElementById('workflowPopupList');
+        var header = document.getElementById('workflowPopupHeader');
+        if (!list) return;
+        if (header) header.textContent = t('wfPopupHeader');
+        list.innerHTML = '';
+        wfPopupItems.forEach(function(it, idx) {
+            var def = wfDef(it.mode);
+            var el = document.createElement('button');
+            el.type = 'button';
+            el.className = 'workflow-popup-item' + (idx === wfPopupIndex ? ' active' : '') + (pendingWorkflow === it.mode ? ' selected' : '');
+            el.innerHTML =
+                '<span class="workflow-popup-icon" style="background:' + def.color + ';">' + (def.icon || '') + '</span>' +
+                '<span class="workflow-popup-texts">' +
+                    '<span class="workflow-popup-name">' + escapeHtml(it.name) + ' <span class="wf-name-zh">' + escapeHtml(it.zh) + '</span></span>' +
+                    '<span class="workflow-popup-desc">' + escapeHtml(it.desc) + '</span>' +
+                '</span>' +
+                '<svg class="wf-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+            el.addEventListener('click', function(e) {
+                e.stopPropagation();
+                wfSelectWorkflow(it.mode);
+            });
+            el.addEventListener('mousemove', function() {
+                if (wfPopupIndex !== idx) {
+                    wfPopupIndex = idx;
+                    wfUpdatePopupActive();
+                }
+            });
+            list.appendChild(el);
+        });
+    }
+    function wfUpdatePopupActive() {
+        var list = document.getElementById('workflowPopupList');
+        if (!list) return;
+        Array.prototype.forEach.call(list.children, function(el, idx) {
+            el.classList.toggle('active', idx === wfPopupIndex);
+        });
+    }
+    function openWorkflowPopup() {
+        var popup = document.getElementById('workflowPopup');
+        if (!popup) return;
+        var value = messageInput.value;
+        var query = value.charAt(0) === '/' ? value.slice(1) : '';
+        wfPopupItems = wfPopupBuildItems(query);
+        wfPopupIndex = 0;
+        // 默认高亮"当前已选"项（若有）
+        for (var i = 0; i < wfPopupItems.length; i++) {
+            if (wfPopupItems[i].mode === pendingWorkflow) { wfPopupIndex = i; break; }
+        }
+        wfRenderPopup();
+        popup.style.display = 'block';
+        wfPopupOpen = true;
+    }
+    function closeWorkflowPopup() {
+        var popup = document.getElementById('workflowPopup');
+        if (popup) popup.style.display = 'none';
+        wfPopupOpen = false;
+    }
+    function wfSelectWorkflow(mode) {
+        closeWorkflowPopup();
+        messageInput.value = '';
+        autoResize();
+        updateSendBtn();
+        setPendingWorkflow(mode);
+        if (mode === 'none') {
+            showToast(t('wfToastWorkflowOff'), 'success');
+        } else {
+            showToast(wfFormat('wfToastWorkflowOn', { name: wfName(mode) }), 'success');
+        }
+        messageInput.focus();
+    }
+    function handleWorkflowPopupKeydown(e) {
+        if (!wfPopupOpen) return false;
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            wfPopupIndex = (wfPopupIndex + 1) % wfPopupItems.length;
+            wfUpdatePopupActive();
+            return true;
+        }
+        if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            wfPopupIndex = (wfPopupIndex - 1 + wfPopupItems.length) % wfPopupItems.length;
+            wfUpdatePopupActive();
+            return true;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            var it = wfPopupItems[wfPopupIndex];
+            if (it) wfSelectWorkflow(it.mode);
+            return true;
+        }
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            closeWorkflowPopup();
+            return true;
+        }
+        return false;
+    }
+    function handleWorkflowInput() {
+        var v = messageInput.value;
+        if (!wfPopupOpen && v.charAt(0) === '/') {
+            openWorkflowPopup();
+        } else if (wfPopupOpen) {
+            if (v.charAt(0) !== '/') { closeWorkflowPopup(); return; }
+            var prevCount = wfPopupItems.length;
+            wfPopupItems = wfPopupBuildItems(v.slice(1));
+            if (wfPopupItems.length !== prevCount) wfPopupIndex = 0;
+            if (wfPopupIndex >= wfPopupItems.length) wfPopupIndex = Math.max(0, wfPopupItems.length - 1);
+            wfRenderPopup();
+        }
+    }
+
+    // ── 工作流徽章（下一条消息将使用的工作流）──
+    function setPendingWorkflow(mode) {
+        pendingWorkflow = (mode === 'plan' || mode === 'spec' || mode === 'goal') ? mode : 'none';
+        renderWorkflowChip();
+    }
+    function renderWorkflowChip() {
+        var bar = document.getElementById('workflowChipBar');
+        if (!bar) return;
+        if (pendingWorkflow === 'none') {
+            bar.style.display = 'none';
+            return;
+        }
+        bar.style.display = 'flex';
+        var def = wfDef(pendingWorkflow);
+        var dot = document.getElementById('workflowChipDot');
+        if (dot) dot.style.background = def.color;
+        var nameEl = document.getElementById('workflowChipName');
+        if (nameEl) nameEl.textContent = wfName(pendingWorkflow);
+        var modeEl = document.getElementById('workflowChipMode');
+        if (modeEl) modeEl.textContent = wfModeLabel(pendingWorkflow);
+    }
+
+    // ── 会话工作流状态 ──
+    /** 首次发送（isInitial）时初始化/接续本会话的工作流 */
+    function wfBeginTurnForOutgoingMessage(conv, content) {
+        var wf = normalizeWorkflow(conv.workflow);
+        var mode = pendingWorkflow;
+        if (!wf || wf.status === 'completed' || wf.status === 'cancelled' || wf.mode !== mode) {
+            if (mode === 'none') {
+                // 用户清掉了工作流徽章：结束仍在进行的工作流，回归普通对话
+                if (wf && wf.status !== 'completed' && wf.status !== 'cancelled') {
+                    wf.status = 'completed';
+                    saveCurrentConversation();
+                    if (conv.id === activeConversationId) renderWorkflowCardForConv(conv);
+                }
+                return null;
+            }
+            conv.workflow = {
+                mode: mode,
+                status: mode === 'goal' ? 'running' : 'drafting',
+                taskName: '',
+                planDoc: '',
+                docs: { spec: '', tasks: '', checklist: '' },
+                goal: { text: content, round: 0, maxRounds: WF_GOAL_MAX_ROUNDS },
+                savedPaths: {},
+                edited: false
+            };
+            wf = conv.workflow;
+        }
+        if (wf.mode === 'goal' && wf.status === 'running') {
+            // 用户在 goal 进行中追加消息：并入目标描述，帮助模型对齐
+            if (wf.goal.text && wf.goal.text !== content) {
+                wf.goal.text = wf.goal.text + '\n（用户补充：' + content + '）';
+            }
+        }
+        saveCurrentConversation();
+        return wf;
+    }
+
+    /** 确认执行 */
+    function wfApprove() {
+        var conv = getActiveConv();
+        var wf = conv && normalizeWorkflow(conv.workflow);
+        if (!wf) return;
+        if (isLoading) { showToast(t('sendWhileGenerating'), 'error'); return; }
+        wfDeriveTaskName(wf, conv);
+        wf.status = 'executing';
+        wf.edited = false;
+        saveCurrentConversation();
+        wfSaveAllDocs(wf);
+        renderWorkflowCardForConv(conv);
+        showToast(t('wfToastApproved'), 'success');
+        var directive = wf.mode === 'plan'
+            ? '[PLAN_APPROVED] 用户已确认计划文档，请严格按照计划里的步骤逐一执行；每完成一步简要汇报进度，全部完成后在回复末尾单独输出一行 [PLAN_COMPLETE]。'
+            : '[SPEC_APPROVED] 用户已确认文档，请按 tasks.md 里的任务逐个执行：每完成一个任务，在回复末尾输出 [TASK_DONE:任务序号]；每验证通过一条验收项，输出 [CHECK_DONE:验收项序号]；全部任务与验收项完成后，在回复末尾单独输出一行 [SPEC_COMPLETE]。';
+        sendSyntheticWorkflowMessage(directive, t('wfToastApproved'), conv.id);
+    }
+    /** 取消工作流 */
+    function wfCancelWorkflow() {
+        var conv = getActiveConv();
+        var wf = conv && normalizeWorkflow(conv.workflow);
+        if (!wf) return;
+        customConfirm(t('wfCancelConfirm'), { confirmLabel: t('wfBtnCancel'), danger: true }).then(function(ok) {
+            if (!ok) return;
+            wf.status = 'cancelled';
+            saveCurrentConversation();
+            renderWorkflowCardForConv(conv);
+            setPendingWorkflow(workflowSettings.workflow);
+            showToast(t('wfToastCancelled'), 'success');
+        });
+    }
+    /** 编辑文档弹窗 */
+    function wfOpenDocEditor() {
+        var conv = getActiveConv();
+        var wf = conv && normalizeWorkflow(conv.workflow);
+        if (!wf) return;
+        var docs = [];
+        if (wf.mode === 'plan' && wf.planDoc) docs.push({ file: 'plan.md', get: function() { return wf.planDoc; }, set: function(v) { wf.planDoc = v; } });
+        if (wf.mode === 'spec') {
+            if (wf.docs.spec) docs.push({ file: 'spec.md', get: function() { return wf.docs.spec; }, set: function(v) { wf.docs.spec = v; } });
+            if (wf.docs.tasks) docs.push({ file: 'tasks.md', get: function() { return wf.docs.tasks; }, set: function(v) { wf.docs.tasks = v; } });
+            if (wf.docs.checklist) docs.push({ file: 'checklist.md', get: function() { return wf.docs.checklist; }, set: function(v) { wf.docs.checklist = v; } });
+        }
+        if (!docs.length) return;
+        if (wfEditOverlay) { wfEditOverlay.remove(); wfEditOverlay = null; }
+        var currentIdx = 0;
+        var overlay = document.createElement('div');
+        overlay.className = 'wf-edit-overlay';
+        overlay.innerHTML =
+            '<div class="wf-edit-panel">' +
+                '<div class="wf-edit-head">' +
+                    '<span class="workflow-card-icon" style="background:' + wfDef(wf.mode).color + ';width:26px;height:26px;border-radius:8px;">' + (wfDef(wf.mode).icon || '') + '</span>' +
+                    '<span class="wf-edit-title">' + escapeHtml(t('wfEditTitle')) + '</span>' +
+                    '<span class="wf-edit-file" id="wfEditFileName"></span>' +
+                '</div>' +
+                (docs.length > 1 ? '<div class="wf-edit-tabs" style="display:flex;gap:6px;padding:10px 16px 0;" id="wfEditTabs"></div>' : '') +
+                '<div class="wf-edit-hint">' + escapeHtml(t('wfEditHint')) + '</div>' +
+                '<textarea class="wf-edit-textarea" id="wfEditTextarea" spellcheck="false"></textarea>' +
+                '<div class="wf-edit-actions">' +
+                    '<button class="wf-btn wf-btn-secondary" id="wfEditCancelBtn">' + escapeHtml(t('cancel')) + '</button>' +
+                    '<button class="wf-btn wf-btn-primary" id="wfEditSaveBtn">' + escapeHtml(t('save')) + '</button>' +
+                '</div>' +
+            '</div>';
+        document.body.appendChild(overlay);
+        wfEditOverlay = overlay;
+        var textarea = overlay.querySelector('#wfEditTextarea');
+        function loadDoc(idx) {
+            currentIdx = idx;
+            textarea.value = docs[idx].get();
+            var fileEl = overlay.querySelector('#wfEditFileName');
+            if (fileEl) fileEl.textContent = docs[idx].file;
+            var tabs = overlay.querySelector('#wfEditTabs');
+            if (tabs) {
+                tabs.innerHTML = '';
+                docs.forEach(function(d, i) {
+                    var tb = document.createElement('button');
+                    tb.type = 'button';
+                    tb.className = 'wf-btn wf-btn-secondary' + (i === currentIdx ? '' : ' wf-dir-clear');
+                    tb.style.padding = '5px 12px';
+                    tb.style.fontSize = '11.5px';
+                    tb.textContent = d.file;
+                    tb.addEventListener('click', function() { loadDoc(i); });
+                    tabs.appendChild(tb);
+                });
+            }
+        }
+        loadDoc(0);
+        overlay.addEventListener('click', function(e) { if (e.target === overlay) closeWfEditor(); });
+        overlay.querySelector('#wfEditCancelBtn').addEventListener('click', closeWfEditor);
+        overlay.querySelector('#wfEditSaveBtn').addEventListener('click', function() {
+            docs[currentIdx].set(textarea.value);
+            wf.edited = true;
+            saveCurrentConversation();
+            renderWorkflowCardForConv(conv);
+            showToast(t('wfToastEdited'), 'success');
+            closeWfEditor();
+        });
+        function escHandler(e) {
+            if (e.key === 'Escape') { e.stopPropagation(); closeWfEditor(); }
+        }
+        function closeWfEditor() {
+            document.removeEventListener('keydown', escHandler);
+            if (overlay.parentNode) overlay.remove();
+            if (wfEditOverlay === overlay) wfEditOverlay = null;
+        }
+        document.addEventListener('keydown', escHandler);
+        setTimeout(function() { textarea.focus(); }, 60);
+    }
+
+    // ── 工作流状态卡片 ──
+    function wfStatusBadge(wf) {
+        if (wf.status === 'awaiting') return '<span class="workflow-status-badge awaiting">' + escapeHtml(t('wfCardAwaitingSub')) + '</span>';
+        if (wf.status === 'executing' || wf.status === 'running' || wf.status === 'drafting') return '<span class="workflow-status-badge executing">' + escapeHtml(wf.status === 'drafting' ? t('thinking') : t('wfCardExecutingSub')) + '</span>';
+        if (wf.status === 'cancelled') return '<span class="workflow-status-badge cancelled">' + escapeHtml(t('wfCardCancelledTitle')) + '</span>';
+        return '<span class="workflow-status-badge done">' + escapeHtml(t('wfCardGoalDoneTitle')) + '</span>';
+    }
+    function wfDocBlockHtml(file, content, collapsed) {
+        var counter = wfCountCheckboxes(content);
+        var countTxt = counter.total ? '<span class="wf-doc-count">' + counter.done + '/' + counter.total + '</span>' : '';
+        return '<div class="wf-doc-block' + (collapsed ? ' collapsed' : '') + '" data-wf-file="' + file + '">' +
+            '<button type="button" class="wf-doc-head">' +
+                '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>' +
+                '<span class="wf-doc-file">' + escapeHtml(file) + '</span>' + countTxt +
+                '<svg class="wf-doc-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+            '</button>' +
+            '<div class="wf-doc-body">' + formatMarkdown(content) + '</div>' +
+        '</div>';
+    }
+    function renderWorkflowCardForConv(conv) {
+        var wf = conv && normalizeWorkflow(conv.workflow);
+        if (!wf) return;
+        // 只在当前视图就是该会话时渲染
+        if (conv.id !== activeConversationId) return;
+        if (activeWorkflowCard && activeWorkflowCard.parentNode) activeWorkflowCard.remove();
+        activeWorkflowCard = null;
+        if (wf.status === 'drafting') return; // 生成中先不出卡片，等回合结束
+
+        var def = wfDef(wf.mode);
+        var card = document.createElement('div');
+        card.className = 'workflow-card';
+        var title = '';
+        var sub = '';
+        if (wf.mode === 'plan') {
+            if (wf.status === 'awaiting') { title = t('wfCardPlanTitle'); sub = t('wfCardAwaitingSub'); }
+            else if (wf.status === 'executing') { title = t('wfCardPlanTitle'); sub = t('wfCardExecutingSub'); }
+            else if (wf.status === 'completed') { title = t('wfCardPlanDoneTitle'); sub = wf.taskName; }
+            else { title = t('wfCardCancelledTitle'); sub = ''; }
+        } else if (wf.mode === 'spec') {
+            if (wf.status === 'awaiting') { title = t('wfCardSpecTitle'); sub = t('wfCardAwaitingSub'); }
+            else if (wf.status === 'executing') { title = t('wfCardSpecTitle'); sub = t('wfCardExecutingSub'); }
+            else if (wf.status === 'completed') { title = t('wfCardSpecDoneTitle'); sub = wf.taskName; }
+            else { title = t('wfCardCancelledTitle'); sub = ''; }
+        } else if (wf.mode === 'goal') {
+            if (wf.status === 'running') { title = t('wfCardGoalTitle'); sub = t('wfCardGoalSub'); }
+            else if (wf.status === 'completed') { title = t('wfCardGoalDoneTitle'); sub = t('wfCardGoalDoneSub'); }
+            else { title = t('wfCardCancelledTitle'); sub = ''; }
+        }
+
+        var headInner =
+            '<span class="workflow-card-icon" style="background:' + def.color + ';">' + (def.icon || '') + '</span>' +
+            '<div class="workflow-card-titles">' +
+                '<div class="workflow-card-title">' + escapeHtml(title) + '</div>' +
+                (sub ? '<div class="workflow-card-sub">' + escapeHtml(sub) + '</div>' : '') +
+            '</div>';
+        // Spec 执行中：进度环
+        if (wf.mode === 'spec' && (wf.status === 'executing' || wf.status === 'completed')) {
+            var c = wfCountCheckboxes(wf.docs.tasks);
+            var pct = c.total ? Math.round(c.done / c.total * 100) : 0;
+            headInner +=
+                '<div class="workflow-progress-ring">' +
+                    '<svg viewBox="0 0 36 36">' +
+                        '<circle cx="18" cy="18" r="15.5" fill="none" stroke="var(--surface-tertiary)" stroke-width="3.5"></circle>' +
+                        '<circle cx="18" cy="18" r="15.5" fill="none" stroke="' + def.color + '" stroke-width="3.5" stroke-linecap="round" stroke-dasharray="' + (pct * 0.974).toFixed(1) + ' 97.4" transform="rotate(-90 18 18)"></circle>' +
+                    '</svg>' +
+                    '<span class="workflow-progress-num">' + c.done + '/' + c.total + '</span>' +
+                '</div>';
+        } else {
+            headInner += wfStatusBadge(wf);
+        }
+        card.innerHTML = '<div class="workflow-card-head">' + headInner + '</div>';
+
+        var docsWrap = document.createElement('div');
+        docsWrap.className = 'workflow-card-docs';
+        var hasDocs = false;
+        if (wf.mode === 'plan' && wf.planDoc) {
+            docsWrap.innerHTML = wfDocBlockHtml('plan.md', wf.planDoc, false);
+            hasDocs = true;
+        } else if (wf.mode === 'spec') {
+            var html = '';
+            if (wf.docs.spec) html += wfDocBlockHtml('spec.md', wf.docs.spec, wf.status === 'executing');
+            if (wf.docs.tasks) html += wfDocBlockHtml('tasks.md', wf.docs.tasks, false);
+            if (wf.docs.checklist) html += wfDocBlockHtml('checklist.md', wf.docs.checklist, wf.status === 'executing' || wf.status === 'completed');
+            if (html) { docsWrap.innerHTML = html; hasDocs = true; }
+        } else if (wf.mode === 'goal' && wf.goal && wf.goal.text) {
+            var goalMd = '## ' + t('wfSettingsDefaultLabel') + '\n' + wf.goal.text.replace(/\n/g, '\n');
+            docsWrap.innerHTML = '<div class="wf-doc-block">' +
+                '<button type="button" class="wf-doc-head">' +
+                    '<span class="workflow-card-sub" style="margin:0;">' + escapeHtml(t('wfGoalMode')) + '</span>' +
+                '</button>' +
+                '<div class="wf-doc-body" style="white-space:pre-wrap;">' + escapeHtml(wf.goal.text) + '</div>' +
+            '</div>';
+            hasDocs = true;
+        }
+        if (hasDocs) {
+            card.appendChild(docsWrap);
+            Array.prototype.forEach.call(card.querySelectorAll('.wf-doc-head'), function(head) {
+                head.addEventListener('click', function() {
+                    var block = head.closest('.wf-doc-block');
+                    if (block) block.classList.toggle('collapsed');
+                });
+            });
+        }
+
+        if (wf.edited && wf.status === 'awaiting') {
+            var note = document.createElement('div');
+            note.style.padding = '0 14px 6px';
+            note.innerHTML = '<span class="wf-edited-note"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>' + escapeHtml(t('wfEditedNote')) + '</span>';
+            card.appendChild(note);
+        }
+
+        // 保存路径提示
+        if (workflowSettings.docsDir && wf.savedPaths && Object.keys(wf.savedPaths).length) {
+            var first = wf.savedPaths[Object.keys(wf.savedPaths)[0]] || '';
+            var pathEl = document.createElement('div');
+            pathEl.className = 'wf-saved-path';
+            pathEl.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 3h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z"></path></svg>' +
+                escapeHtml(t('wfSavedTo') + ' ' + first.replace(workflowSettings.docsDir, '').replace(/^([\\/])+/, workflowSettings.docsDir + '/'));
+            card.appendChild(pathEl);
+        }
+
+        var actions = document.createElement('div');
+        actions.className = 'workflow-card-actions';
+        if (wf.status === 'awaiting' && !IS_REMOTE) {
+            actions.innerHTML =
+                '<button type="button" class="wf-btn wf-btn-primary" data-act="approve">' +
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>' +
+                    escapeHtml(t('wfBtnApprove')) + '</button>' +
+                '<button type="button" class="wf-btn wf-btn-secondary" data-act="edit">' +
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>' +
+                    escapeHtml(t('wfBtnEdit')) + '</button>' +
+                '<span class="wf-spacer"></span>' +
+                '<button type="button" class="wf-btn wf-btn-ghost" data-act="cancel">' + escapeHtml(t('wfBtnCancel')) + '</button>';
+        } else if (wf.status === 'awaiting' && IS_REMOTE) {
+            // 手机远程端是桌面页面的镜像：确认/编辑回电脑上操作
+            actions.innerHTML = '<span class="workflow-card-sub" style="padding:0;">' + escapeHtml(t('manageOnDesktop')) + '</span>';
+        } else if (wf.status === 'executing' || wf.status === 'running') {
+            actions.innerHTML = '<span class="workflow-card-sub" style="padding:0;">' + escapeHtml(t('wfCardExecutingSub')) + '</span>';
+        } else {
+            actions.style.display = 'none';
+        }
+        card.appendChild(actions);
+        var approveBtn = actions.querySelector('[data-act="approve"]');
+        if (approveBtn) approveBtn.addEventListener('click', wfApprove);
+        var editBtn = actions.querySelector('[data-act="edit"]');
+        if (editBtn) editBtn.addEventListener('click', wfOpenDocEditor);
+        var cancelBtn = actions.querySelector('[data-act="cancel"]');
+        if (cancelBtn) cancelBtn.addEventListener('click', wfCancelWorkflow);
+
+        chatArea.appendChild(card);
+        activeWorkflowCard = card;
+        scrollToBottom();
+    }
+
+    /** 切换/重建会话历史后恢复工作流卡片 */
+    function restoreWorkflowCard() {
+        activeWorkflowCard = null;
+        var conv = getActiveConv();
+        var wf = conv && normalizeWorkflow(conv.workflow);
+        if (!wf) return;
+        if (wf.status === 'awaiting' || wf.status === 'executing' || wf.status === 'running' ||
+            wf.status === 'completed' || wf.status === 'cancelled') {
+            renderWorkflowCardForConv(conv);
+        }
+    }
+
+    // ── 回合结束钩子：解析模型输出里的工作流标记 ──
+    function handleWorkflowTurnEnd(finalContent) {
+        var conv = (generatingConvId && conversations.find(function(c) { return c.id === generatingConvId; })) || getActiveConv();
+        var wf = conv && normalizeWorkflow(conv.workflow);
+        if (!wf) return;
+        var changed = false;
+
+        if (wf.mode === 'plan') {
+            if (wf.status === 'drafting' || wf.status === 'awaiting') {
+                var plan = wfExtractBlock(finalContent, WF_PLAN_BEGIN, WF_PLAN_END);
+                if (plan) {
+                    wf.planDoc = plan;
+                    wf.status = 'awaiting';
+                    wfDeriveTaskName(wf, conv);
+                    changed = true;
+                    if (workflowSettings.docsDir) wfSaveDocToDisk(wf, 'plan.md', plan);
+                }
+            } else if (wf.status === 'executing') {
+                if (finalContent.indexOf('[PLAN_COMPLETE]') >= 0) {
+                    wf.status = 'completed';
+                    changed = true;
+                    setPendingWorkflow(workflowSettings.workflow);
+                }
+            }
+        } else if (wf.mode === 'spec') {
+            if (wf.status === 'drafting' || wf.status === 'awaiting') {
+                var spec = wfExtractBlock(finalContent, WF_SPEC_BEGIN, WF_SPEC_END);
+                var tasks = wfExtractBlock(finalContent, WF_TASKS_BEGIN, WF_TASKS_END);
+                var checklist = wfExtractBlock(finalContent, WF_CHECKLIST_BEGIN, WF_CHECKLIST_END);
+                if (spec) wf.docs.spec = spec;
+                if (tasks) wf.docs.tasks = tasks;
+                if (checklist) wf.docs.checklist = checklist;
+                if (spec || tasks || checklist) {
+                    wf.status = 'awaiting';
+                    wfDeriveTaskName(wf, conv);
+                    changed = true;
+                    if (workflowSettings.docsDir) {
+                        if (spec) wfSaveDocToDisk(wf, 'spec.md', spec);
+                        if (tasks) wfSaveDocToDisk(wf, 'tasks.md', tasks);
+                        if (checklist) wfSaveDocToDisk(wf, 'checklist.md', checklist);
+                    }
+                }
+            } else if (wf.status === 'executing') {
+                var m;
+                var re = /\[TASK_DONE:(\d+)\]/g;
+                while ((m = re.exec(finalContent)) !== null) {
+                    wf.docs.tasks = wfCheckNthBox(wf.docs.tasks, parseInt(m[1], 10));
+                    changed = true;
+                }
+                var re2 = /\[CHECK_DONE:(\d+)\]/g;
+                while ((m = re2.exec(finalContent)) !== null) {
+                    wf.docs.checklist = wfCheckNthBox(wf.docs.checklist, parseInt(m[1], 10));
+                    changed = true;
+                }
+                if (changed && workflowSettings.docsDir) {
+                    wfSaveDocToDisk(wf, 'tasks.md', wf.docs.tasks);
+                    wfSaveDocToDisk(wf, 'checklist.md', wf.docs.checklist);
+                }
+                if (finalContent.indexOf('[SPEC_COMPLETE]') >= 0) {
+                    wf.status = 'completed';
+                    changed = true;
+                    setPendingWorkflow(workflowSettings.workflow);
+                }
+            }
+        } else if (wf.mode === 'goal') {
+            if (wf.status === 'running') {
+                wf.goal.round++;
+                changed = true;
+                if (/\[GOAL_STATUS:achieved\]/.test(finalContent)) {
+                    wf.status = 'completed';
+                    setPendingWorkflow(workflowSettings.workflow);
+                }
+            }
+        }
+
+        if (changed) saveCurrentConversation();
+        // 渲染 / 刷新卡片（当前视图为本会话时）
+        if (isGeneratingConvVisible()) renderWorkflowCardForConv(conv);
+
+        // Goal 模式自动续跑
+        if (wf.mode === 'goal' && wf.status === 'running') {
+            var round = wf.goal.round;
+            if (round >= wf.goal.maxRounds) {
+                wf.status = 'completed';
+                saveCurrentConversation();
+                if (isGeneratingConvVisible()) renderWorkflowCardForConv(conv);
+                return;
+            }
+            // 稍等一拍再续跑，给界面留出渲染时间
+            setTimeout(function() {
+                // 续跑前用户可能已切走：仍按会话账本续
+                var c2 = conversations.find(function(cc) { return cc.id === conv.id; });
+                var wf2 = c2 && normalizeWorkflow(c2.workflow);
+                if (!wf2 || wf2.status !== 'running') return;
+                if (typeof isLoading !== 'undefined' && isLoading) return; // 用户已手动开了新一轮
+                var display = wfFormat('wfGoalRoundDone', { n: round });
+                if (c2.id === activeConversationId) appendGoalRoundDivider(round);
+                sendSyntheticWorkflowMessage(
+                    '[GOAL_CONTINUE] 目标尚未达成（系统自动续跑，第 ' + (round + 1) + ' 轮，共 ' + wf2.goal.maxRounds + ' 轮）。请继续推进目标，并在回复末尾输出状态标记 [GOAL_STATUS:achieved] 或 [GOAL_STATUS:not_achieved]。',
+                    display,
+                    c2.id
+                );
+            }, 600);
+        }
+    }
+
+    /** Goal 续跑的分隔胶囊 */
+    function appendGoalRoundDivider(round) {
+        var div = document.createElement('div');
+        div.className = 'workflow-goal-round';
+        div.innerHTML = (wfDef('goal').icon || '') + '<span>' + escapeHtml(wfFormat('wfGoalRound', { n: round + 1 })) + '</span>';
+        chatArea.appendChild(div);
+        scrollToBottom();
+    }
+
+    // ── 主进程工作流设置的读取 / 保存 ──
+    function loadWorkflowSettings() {
+        if (!window.AIAssistantPreload || !AIAssistantPreload.getWorkflowSettings) return;
+        AIAssistantPreload.getWorkflowSettings().then(function(s) {
+            if (!s) return;
+            workflowSettings.workflow = (s.workflow === 'plan' || s.workflow === 'spec' || s.workflow === 'goal') ? s.workflow : 'none';
+            workflowSettings.docsDir = typeof s.docsDir === 'string' ? s.docsDir : '';
+            setPendingWorkflow(workflowSettings.workflow);
+            renderWorkflowSettingsPane();
+        }).catch(function() {});
+        if (AIAssistantPreload.onWorkflowSettingsChanged) {
+            AIAssistantPreload.onWorkflowSettingsChanged(function(s) {
+                if (!s) return;
+                workflowSettings.workflow = (s.workflow === 'plan' || s.workflow === 'spec' || s.workflow === 'goal') ? s.workflow : 'none';
+                workflowSettings.docsDir = typeof s.docsDir === 'string' ? s.docsDir : '';
+                // 只更新默认值，不覆盖用户当前明确的徽章选择
+                renderWorkflowSettingsPane();
+            });
+        }
+    }
+
+    function saveWorkflowSettings(partial) {
+        if (!window.AIAssistantPreload || !AIAssistantPreload.saveWorkflowSettings) return;
+        AIAssistantPreload.saveWorkflowSettings(partial).then(function(s) {
+            if (!s) return;
+            workflowSettings.workflow = (s.workflow === 'plan' || s.workflow === 'spec' || s.workflow === 'goal') ? s.workflow : 'none';
+            workflowSettings.docsDir = typeof s.docsDir === 'string' ? s.docsDir : '';
+            renderWorkflowSettingsPane();
+        }).catch(function() {});
+    }
+
+    // ── AI 设置页：工作流 pane ──
+    function renderWorkflowSettingsPane() {
+        var wrap = document.getElementById('wfDefaultOptions');
+        if (!wrap) return;
+        wrap.innerHTML = '';
+        var modes = [
+            { mode: 'none', name: t('wfNoneName'), zh: t('wfNoneMode'), desc: t('wfNoneDesc') },
+            { mode: 'plan', name: t('wfPlanName'), zh: t('wfPlanMode'), desc: t('wfPlanDesc') },
+            { mode: 'spec', name: t('wfSpecName'), zh: t('wfSpecMode'), desc: t('wfSpecDesc') },
+            { mode: 'goal', name: t('wfGoalName'), zh: t('wfGoalMode'), desc: t('wfGoalDesc') }
+        ];
+        modes.forEach(function(m) {
+            var def = wfDef(m.mode);
+            var el = document.createElement('button');
+            el.type = 'button';
+            el.className = 'wf-option' + (workflowSettings.workflow === m.mode ? ' selected' : '');
+            el.innerHTML =
+                '<span class="wf-option-icon" style="background:' + def.color + ';">' + (def.icon || '') + '</span>' +
+                '<span class="wf-option-texts">' +
+                    '<span class="wf-option-name">' + escapeHtml(m.name) + ' <span class="wf-zh">' + escapeHtml(m.zh) + '</span></span>' +
+                    '<span class="wf-option-desc">' + escapeHtml(m.desc) + '</span>' +
+                '</span>';
+            el.addEventListener('click', function() {
+                saveWorkflowSettings({ workflow: m.mode });
+                setPendingWorkflow(m.mode);
+                showToast(t('wfSettingsSaved'), 'success');
+            });
+            wrap.appendChild(el);
+        });
+        var pathEl = document.getElementById('wfDocsDirPath');
+        if (pathEl) {
+            if (workflowSettings.docsDir) {
+                pathEl.textContent = workflowSettings.docsDir;
+                pathEl.classList.remove('empty');
+            } else {
+                pathEl.textContent = t('wfDirUnset');
+                pathEl.classList.add('empty');
+            }
+        }
+        var openBtn = document.getElementById('wfOpenDirBtn');
+        if (openBtn) openBtn.style.display = workflowSettings.docsDir ? 'inline-flex' : 'none';
+    }
+
+    function setupWorkflowSettingsEvents() {
+        var pickBtn = document.getElementById('wfPickDirBtn');
+        if (pickBtn) pickBtn.addEventListener('click', function() {
+            if (IS_REMOTE || !window.AIAssistantPreload || !AIAssistantPreload.pickWorkflowDocsDir) {
+                showToast(t('manageOnDesktop'), 'error');
+                return;
+            }
+            AIAssistantPreload.pickWorkflowDocsDir().then(function(s) {
+                if (s) {
+                    workflowSettings.docsDir = typeof s.docsDir === 'string' ? s.docsDir : '';
+                    renderWorkflowSettingsPane();
+                    showToast(t('wfSettingsSaved'), 'success');
+                }
+            }).catch(function() {});
+        });
+        var openBtn = document.getElementById('wfOpenDirBtn');
+        if (openBtn) openBtn.addEventListener('click', function() {
+            if (!window.AIAssistantPreload || !AIAssistantPreload.openWorkflowDocsDir) return;
+            AIAssistantPreload.openWorkflowDocsDir();
+        });
+        var tabBtn = document.getElementById('settingsTabWorkflow');
+        if (tabBtn) tabBtn.addEventListener('click', function() { setSettingsTab('workflow'); });
+    }
+
+    function buildSystemPrompt(wfState) {
         var lang = getSystemPromptLanguage();
+        var wfSection = buildWorkflowPromptSection(wfState);
         if (IS_SOLO) {
-            if (soloProject && soloProject.type === 'js') return buildSoloJsSystemPrompt(lang);
-            if (!soloProject) return buildSoloIdleSystemPrompt(lang);
+            if (soloProject && soloProject.type === 'js') return buildSoloJsSystemPrompt(lang) + wfSection;
+            if (!soloProject) return buildSoloIdleSystemPrompt(lang) + wfSection;
             // sb3：走下面的完整 Scratch 提示词
         }
-        var desc = 'You are NeoWarp AI, a Scratch 3.0 programming assistant.\n\n=== HOW YOU CHANGE THE PROJECT ===\nYou edit the project only through the execute_operations tool. Its "operations" argument is a\nJSON array of operation objects; every object needs a "type". Never print raw JSON or block\ncode in your chat replies — put it in the tool call.\n\nBlocks themselves are written as DSL TEXT, not as JSON objects. One block per line:\n\n    opcode arg1 arg2 ...\n\n- Arguments are POSITIONAL and must follow the order in the block dictionary below.\n- Indent by two spaces to put blocks inside a C-block\'s body. Use a line containing only\n  "else" to start the else branch of control_if_else.\n- Token forms: 42 (number) · "text" (string) · $name (variable) · @name (list) ·\n  (opcode args...) (a reporter plugged into that slot) · # starts a comment line.\n- The first line may be a hat block (event_*, control_start_as_clone). If it is not, a\n  green-flag hat is added automatically.\n\nExample of a complete script:\n\n    event_whenkeypressed "space"\n    control_repeat 10\n      motion_changeyby 6\n      control_wait 0.02\n    control_repeat 10\n      motion_changeyby -6\n      control_wait 0.02\n\nExample with a nested reporter and an else branch:\n\n    event_whenflagclicked\n    control_if_else (operator_gt (sensing_timer) 10)\n      looks_say "time is up"\n    else\n      looks_say (operator_join "left: " (operator_subtract 10 (sensing_timer)))\n\n=== CONTEXT ===\nEach user message carries a JSON context describing the current project. Blocks in it have\ntemporary ids ("tid") that you pass back in targetId. ONLY use tids that appear in the\ncontext — never invent one. Sprite, costume, sound and backdrop names are case-sensitive and\nmust match the context exactly.\n\n=== OPERATION TYPES ===\n\n1. add_script — create a NEW script (its own stack) on a sprite\n{"type":"add_script","sprite":"Cat","script":"event_whenflagclicked\\n  looks_say \\"hi\\""}\n\n2. insert_blocks — insert blocks INTO an existing script (no new stack is created)\n{"type":"insert_blocks","targetId":"b4","position":"after","blocks":"control_wait 0.5\\nlooks_nextcostume"}\n- position "after"      → directly below the anchor block (default)\n- position "before"     → directly above the anchor block (not allowed on a hat block)\n- position "body_start" → as the first block inside the anchor C-block\'s body\n- position "body_end"   → as the last block inside the anchor C-block\'s body\n- add "branch":"else" with body_start/body_end to target the else branch of control_if_else\n- "blocks" is body DSL text; it must NOT start with a hat block\nUse this instead of add_script whenever the user asks to add something to existing code —\nit keeps one script instead of leaving a second disconnected stack on the workspace.\n\n3. delete_block — remove a block by tid\n{"type":"delete_block","sprite":"Cat","targetId":"b2","mode":"with_children"}\n- mode "with_children" (default) removes the block plus its body and everything below it\n- mode "block_only" removes just that block and reconnects its neighbours\n\n4. modify_input — change one input of an existing block\n{"type":"modify_input","sprite":"Cat","targetId":"b2","inputName":"TIMES","value":20}\n- value may be a number, a string, or a reporter as {"opcode":"...","inputs":{...}}\n- inputName must be one of the argument names listed for that opcode\n- for SUBSTACK / SUBSTACK2 you may pass DSL text to replace the whole body\n\n5. add_comment — attach a comment to a block, or place a free-floating one\n{"type":"add_comment","sprite":"Cat","targetId":"b3","text":"jump logic","minimized":false}\n{"type":"add_comment","sprite":"Cat","x":200,"y":100,"text":"TODO: collision"}\n- returns data.commentId; keep it if you might delete that comment later\n- commenting your code is encouraged; Chinese text is fine\n\n6. delete_comment — remove a comment\n{"type":"delete_comment","sprite":"Cat","targetId":"b3"}\n{"type":"delete_comment","sprite":"Cat","commentId":"_ai_cmt_123_abc"}\n\n7. explain — show a short explanation to the user (changes nothing)\n{"type":"explain","text":"Raised the repeat count to 20."}\n\n=== VALIDATION ===\nScripts are checked BEFORE anything is applied. If a check fails, nothing is created and you\nget the exact reason back — read it and fix that specific problem rather than retrying the\nsame text. Rejections happen for: unknown opcodes, a hat block used anywhere but the first\nline, too many arguments, blocks indented under a block that has no body, and "else" on a\nblock without an else branch. You may also get warnings (empty C-block body, a costume or\nsound name that does not exist, a number slot given text); those still apply, but check them.\n\n=== VARIABLES, LISTS AND MESSAGES ===\n- $name and @name auto-create the variable or list on the Stage if it does not exist yet.\n- Broadcast messages are auto-created the same way; just use the message name.\n- Prefer create_variable / create_list when you want to be explicit about ownership.\n\n=== BLOCK DICTIONARY (generated from the editor schema — these signatures are exact) ===\nEach line is: opcode <arg1> <arg2> …  — write the arguments in exactly this order.\n$name = variable, @name = list, "text" = string, bare number = number, (opcode …) = nested reporter.\n[C] marks a C-block: put its body on the following lines, indented two more spaces.\n\nMotion:\n  motion_changexby DX:num\n  motion_changeyby DY:num\n  motion_direction\n  motion_glidesecstoxy SECS:num X:num Y:num\n  motion_glideto SECS:num TO:"_mouse_"|"_random_"|"<sprite name>"\n  motion_goto TO:"_mouse_"|"_random_"|"<sprite name>"\n  motion_gotoxy X:num Y:num\n  motion_ifonedgebounce\n  motion_movesteps STEPS:num\n  motion_pointindirection DIRECTION:num\n  motion_pointtowards TOWARDS:"_mouse_"|"_random_"|"<sprite name>"\n  motion_setrotationstyle STYLE:"left-right"|"don\'t rotate"|"all around"\n  motion_setx X:num\n  motion_sety Y:num\n  motion_turnleft DEGREES:num\n  motion_turnright DEGREES:num\n  motion_xposition\n  motion_yposition\n\nLooks:\n  looks_backdropnumbername NUMBER_NAME:"number"|"name"\n  looks_changeeffectby EFFECT:"COLOR"|"FISHEYE"|"WHIRL"|"PIXELATE"|"MOSAIC"|"BRIGHTNESS"|"GHOST" CHANGE:num\n  looks_changesizeby CHANGE:num\n  looks_changestretchby CHANGE:num\n  looks_cleargraphiceffects\n  looks_costumenumbername NUMBER_NAME:"number"|"name"\n  looks_goforwardbackwardlayers FORWARD_BACKWARD:"forward"|"backward" NUM:num\n  looks_gotofrontback FRONT_BACK:"front"|"back"\n  looks_hide\n  looks_nextbackdrop\n  looks_nextcostume\n  looks_say MESSAGE:text\n  looks_sayforsecs MESSAGE:text SECS:num\n  looks_seteffectto EFFECT:"COLOR"|"FISHEYE"|"WHIRL"|"PIXELATE"|"MOSAIC"|"BRIGHTNESS"|"GHOST" VALUE:num\n  looks_setsizeto SIZE:num\n  looks_setstretchto STRETCH:num\n  looks_show\n  looks_size\n  looks_switchbackdropto BACKDROP:"<backdrop name>"|"next backdrop"|"previous backdrop"|"random backdrop"\n  looks_switchbackdroptoandwait BACKDROP:"<backdrop name>"\n  looks_switchcostumeto COSTUME:"<costume name>"\n  looks_think MESSAGE:text\n  looks_thinkforsecs MESSAGE:text SECS:num\n\nSound:\n  sound_changeeffectby EFFECT:"PITCH"|"PAN" VALUE:num\n  sound_changevolumeby VOLUME:num\n  sound_cleareffects\n  sound_play SOUND_MENU:"<sound name>"\n  sound_playuntildone SOUND_MENU:"<sound name>"\n  sound_seteffectto EFFECT:"PITCH"|"PAN" VALUE:num\n  sound_setvolumeto VOLUME:num\n  sound_stopallsounds\n  sound_volume\n\nEvents:\n  event_broadcast "message"\n  event_broadcastandwait "message"\n  event_whenbackdropswitchesto BACKDROP:"<backdrop name>"\n  event_whenbroadcastreceived "message"\n  event_whenflagclicked\n  event_whengreaterthan WHENGREATERTHANMENU:"LOUDNESS"|"TIMER" VALUE:num\n  event_whenkeypressed KEY_OPTION:"space"|"up arrow"|"down arrow"|"right arrow"|"left arrow"|"any"|"a"|"b"|"c"|"d"|"e"|"f"|"g"|"h"|"i"|"j"|"k"|"l"|"m"|"n"|"o"|"p"|"q"|"r"|"s"|"t"|"u"|"v"|"w"|"x"|"y"|"z"|"0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"\n  event_whenstageclicked\n  event_whenthisspriteclicked\n\nControl:\n  control_all_at_once  [C]\n  control_clear_counter\n  control_create_clone_of CLONE_OPTION:"_myself_"|"<sprite name>"\n  control_delete_this_clone\n  control_for_each $var VALUE:num  [C]\n  control_forever  [C]\n  control_get_counter\n  control_if CONDITION:bool  [C]\n  control_if_else CONDITION:bool  [C + else]\n  control_incr_counter\n  control_repeat TIMES:num  [C]\n  control_repeat_until CONDITION:bool  [C]\n  control_start_as_clone\n  control_stop STOP_OPTION:"all"|"this script"|"other scripts in sprite"\n  control_wait DURATION:num\n  control_wait_until CONDITION:bool\n  control_while CONDITION:bool  [C]\n\nSensing:\n  sensing_answer\n  sensing_askandwait QUESTION:text\n  sensing_coloristouchingcolor COLOR:"#rrggbb" COLOR2:"#rrggbb"\n  sensing_current CURRENTMENU:"YEAR"|"MONTH"|"DATE"|"DAYOFWEEK"|"HOUR"|"MINUTE"|"SECOND"\n  sensing_dayssince2000\n  sensing_distanceto DISTANCETOMENU:"_mouse_"|"<sprite name>"\n  sensing_keypressed KEY_OPTION:"space"|"up arrow"|"down arrow"|"right arrow"|"left arrow"|"any"|"a"|"b"|"c"|"d"|"e"|"f"|"g"|"h"|"i"|"j"|"k"|"l"|"m"|"n"|"o"|"p"|"q"|"r"|"s"|"t"|"u"|"v"|"w"|"x"|"y"|"z"|"0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"\n  sensing_loudness\n  sensing_mousedown\n  sensing_mousex\n  sensing_mousey\n  sensing_of PROPERTY:"x position"|"y position"|"direction"|"costume #"|"costume name"|"size"|"volume"|"backdrop #"|"backdrop name" OBJECT:"_stage_"|"<sprite name>"\n  sensing_resettimer\n  sensing_setdragmode DRAG_MODE:"draggable"|"not draggable"\n  sensing_timer\n  sensing_touchingcolor COLOR:"#rrggbb"\n  sensing_touchingobject TOUCHINGOBJECTMENU:"_mouse_"|"_edge_"|"<sprite name>"\n  sensing_username\n\nOperators:\n  operator_add NUM1:num NUM2:num\n  operator_and OPERAND1:bool OPERAND2:bool\n  operator_contains STRING1:text STRING2:text\n  operator_divide NUM1:num NUM2:num\n  operator_equals OPERAND1:text OPERAND2:text\n  operator_gt OPERAND1:text OPERAND2:text\n  operator_join STRING1:text STRING2:text\n  operator_length STRING:text\n  operator_letter_of LETTER:num STRING:text\n  operator_lt OPERAND1:text OPERAND2:text\n  operator_mathop OPERATOR:"abs"|"floor"|"ceiling"|"sqrt"|"sin"|"cos"|"tan"|"asin"|"acos"|"atan"|"ln"|"log"|"e ^"|"10 ^" NUM:num\n  operator_mod NUM1:num NUM2:num\n  operator_multiply NUM1:num NUM2:num\n  operator_not OPERAND:bool\n  operator_or OPERAND1:bool OPERAND2:bool\n  operator_random FROM:num TO:num\n  operator_round NUM:num\n  operator_subtract NUM1:num NUM2:num\n\nVariables & Lists:\n  data_addtolist ITEM:text @list\n  data_changevariableby $var VALUE:num\n  data_deletealloflist @list\n  data_deleteoflist INDEX:num @list\n  data_hidelist @list\n  data_hidevariable $var\n  data_insertatlist ITEM:text INDEX:num @list\n  data_itemnumoflist ITEM:text @list\n  data_itemoflist INDEX:num @list\n  data_lengthoflist @list\n  data_listcontainsitem @list ITEM:text\n  data_replaceitemoflist INDEX:num @list ITEM:text\n  data_setvariableto $var VALUE:text\n  data_showlist @list\n  data_showvariable $var\n\nPen (extension):\n  pen_changePenColorParamBy COLOR_PARAM:"color"|"saturation"|"brightness"|"transparency" VALUE:num\n  pen_changePenSizeBy SIZE:num\n  pen_clear\n  pen_penDown\n  pen_penUp\n  pen_setPenColorParamTo COLOR_PARAM:"color"|"saturation"|"brightness"|"transparency" VALUE:num\n  pen_setPenColorToColor COLOR:"#rrggbb"\n  pen_setPenSizeTo SIZE:num\n  pen_stamp\n\n=== SPRITES, VARIABLES AND LISTS ===\nRead before you write. list_sprites / list_variables / list_lists / get_list tell you exactly\nwhat exists; guessing a name and getting an error back costs a whole extra round trip.\n\nScope rule for variables and lists: omit sprite_name and it lives on the Stage and is GLOBAL\n(every sprite can use it) — that is the right default. Pass sprite_name only for state that\ngenuinely belongs to one sprite, such as per-clone health. Reads look on the sprite first and\nthen fall back to the Stage, exactly like Scratch, so passing sprite_name never prevents you\nfrom reaching a global. Every result reports the scope it actually used, so check it rather\nthan assuming.\n\nSprites:\n- list_sprites — everything about every sprite plus the Stage; no arguments\n- add_sprite — add from the built-in library by name/keyword. Scratch may append a number if\n  the name is taken; the result tells you the real name, so use that afterwards.\n- duplicate_sprite — copy a sprite with its scripts, costumes and local variables. new_name\n  is optional; without it Scratch auto-numbers and the result reports the name it chose.\n- rename_sprite — blocks that reference the sprite are updated for you\n- delete_sprite — also destroys its scripts, costumes and local variables; the result lists\n  what was removed, so read it before reporting success\n- set_sprite_property — x, y, size, direction, visible, draggable, rotation_style in one call.\n  Out-of-range numbers are clamped by Scratch and reported in warnings.\n\nVariables:\n- create_variable — value type follows Scratch: numeric strings become numbers. Returns\n  existed:true if it was already there instead of failing.\n- set_variable / get_variable — set_variable returns the previous value too\n- rename_variable / delete_variable — delete_variable refuses while blocks still reference\n  the variable and names the sprites using it; pass force:true only if you truly mean it\n- Names are unique per scope across both kinds: you cannot have a variable and a list called\n  the same thing in the same scope, and the tools say so instead of silently doing the wrong\n  thing.\n\nLists (indices are 1-based; "first" and "last" work wherever an index is taken):\n- create_list — pass items to fill it at creation\n- get_list — read the contents; do this before editing so your indices are right\n- add_to_list — item for one value, items for an array to append several at once\n- insert_to_list — insert at a position, pushing later items down (length+1 appends)\n- set_list_item — replace the value at one position\n- delete_from_list — remove one item; index "all" empties the list\n- clear_list — empty it while keeping the list itself\nEvery list-editing result includes the new length and a preview of the contents, so you do\nnot need a follow-up get_list just to confirm what happened.\n\n=== PROHIBITED ===\n- Do NOT use an opcode that is not in the dictionary above\n- Do NOT reorder a block\'s arguments; the DSL is positional\n- Do NOT put a hat block anywhere except the first line of a script\n- Do NOT use Scratch\'s internal array format like [1,[4,"10"]]\n- Do NOT invent tids; only use tids from the context\n- Do NOT print block code or JSON in your chat reply — it belongs in the tool call\n\n=== OTHER TOOLS ===\nProject & code: get_project_info, get_sprite_scripts, click_green_flag, rename_project,\nset_stage_size, get_stage_screenshot.\nSprites: list_sprites, add_sprite, add_sprite_from_url, duplicate_sprite, rename_sprite,\ndelete_sprite, set_sprite_property, change_costume, add_costume_from_url,\nadd_backdrop, change_backdrop.\nVariables: list_variables, create_variable, get_variable, set_variable, rename_variable,\ndelete_variable.\nLists: list_lists, create_list, get_list, add_to_list, insert_to_list, set_list_item,\ndelete_from_list, clear_list.\nExtensions & misc: get_installed_extensions, search_extensions, develop_extension,\ninstall_extension, delete_extension, web_search, get_system_time, get_system_info, pause_output, ask_user.\n\n- get_sprite_scripts: read a sprite\'s existing scripts back as DSL text. Use it before\n  editing unfamiliar code so you insert in the right place.\n- add_costume_from_url / add_sprite_from_url: add art from an image URL\n- get_stage_screenshot: capture the stage as a PNG; for vision models it is added to the\n  conversation as an image so you can look at the result of your own changes\n- develop_extension: write and load a custom extension at runtime (extension_code,\n  extension_name). extension_code must be a bare class or object literal — e.g.\n  "class MyExt { getInfo(){ return {id:"myext", name:"My Ext", blocks:[{opcode:"go", blockType:"command", text:"go [N]", arguments:{N:{type:"number", defaultValue:1}}}]}; } go(args){ /* ... */ } }"\n  — do NOT prefix it with "const X =" and do NOT call Scratch.extensions.register yourself;\n  the editor wraps and registers it. getInfo() must return an object with id, name, blocks.\n- delete_extension: remove an extension YOU (the AI) added earlier via install_extension or\n  develop_extension (params: extension_id or extension_name). You can ONLY delete extensions\n  you added yourself — built-in extensions and extensions the user added manually are protected\n  and the tool will refuse to delete them. To clean up, call get_installed_extensions to find\n  the exact id/name, then delete_extension with it. Its blocks are removed from the palette.\n- web_search: look up techniques, formulas or documentation on the internet\n- pause_output: pause for 1-60 seconds with a visible countdown (seconds, reason)\n- ask_user: 当用户的要求过于笼统、模糊或存在多种可能解释时，向用户提问以澄清意图（params: question 问题文本, options 2-4 个选项字符串数组）。会渲染一张交互式卡片，用户可点选某个选项或点"其他"输入自定义文本，结果作为工具返回值传回。仅在确实需要澄清时使用，明确具体的请求应直接执行，不要滥用。\n\n=== THINKING AND OUTPUT DISCIPLINE ===\n- Keep your reasoning SHORT. A brief plan (a few sentences) is enough, even for open-ended\n  tasks — start acting with tool calls and adjust from the results instead of thinking\n  through every detail up front.\n- After reasoning you MUST emit either tool calls or a text answer. NEVER end a turn with\n  an empty response; if there is truly nothing to do, reply with one short sentence saying\n  so.\n\n=== TODO LIST WORKFLOW (IMPORTANT) ===\nFor multi-step or complex tasks, plan and execute step by step:\n1. Call plan_todos(items: ["step 1", "step 2", ...], title: "optional title") first.\n2. Then do ONE item at a time: update_todo(index: i, status: "doing"), do the work, then\n   update_todo(index: i, status: "done").\n3. Move on only after the current item is done; the card updates in real time.\n4. Do NOT cram every step into a single execute_operations call.\n5. Simple single-step tasks do not need a todo list.\n\n=== WORKING ON EXISTING CODE ===\nWhen the user asks to modify or extend code that already exists, read it first with\nget_sprite_scripts or the context, then use insert_blocks / modify_input / delete_block on\nthe specific tids. Rebuilding a whole script with add_script when the user asked for a small\nchange loses their layout and leaves duplicate stacks behind.\n\nReply in ' + lang + '.';
-        return desc;
+        var desc = 'You are NeoWarp AI, a Scratch 3.0 programming assistant.\n\n=== HOW YOU CHANGE THE PROJECT ===\nYou edit the project only through the execute_operations tool. Its "operations" argument is a\nJSON array of operation objects; every object needs a "type". Never print raw JSON or block\ncode in your chat replies — put it in the tool call.\n\nBlocks themselves are written as DSL TEXT, not as JSON objects. One block per line:\n\n    opcode arg1 arg2 ...\n\n- Arguments are POSITIONAL and must follow the order in the block dictionary below.\n- Indent by two spaces to put blocks inside a C-block\'s body. Use a line containing only\n  "else" to start the else branch of control_if_else.\n- Token forms: 42 (number) · "text" (string) · $name (variable) · @name (list) ·\n  (opcode args...) (a reporter plugged into that slot) · # starts a comment line.\n- The first line may be a hat block (event_*, control_start_as_clone). If it is not, a\n  green-flag hat is added automatically.\n\nExample of a complete script:\n\n    event_whenkeypressed "space"\n    control_repeat 10\n      motion_changeyby 6\n      control_wait 0.02\n    control_repeat 10\n      motion_changeyby -6\n      control_wait 0.02\n\nExample with a nested reporter and an else branch:\n\n    event_whenflagclicked\n    control_if_else (operator_gt (sensing_timer) 10)\n      looks_say "time is up"\n    else\n      looks_say (operator_join "left: " (operator_subtract 10 (sensing_timer)))\n\n=== CONTEXT ===\nEach user message carries a JSON context describing the current project. Blocks in it have\ntemporary ids ("tid") that you pass back in targetId. ONLY use tids that appear in the\ncontext — never invent one. Sprite, costume, sound and backdrop names are case-sensitive and\nmust match the context exactly.\n\n=== OPERATION TYPES ===\n\n1. add_script — create a NEW script (its own stack) on a sprite\n{"type":"add_script","sprite":"Cat","script":"event_whenflagclicked\\n  looks_say \\"hi\\""}\n\n2. insert_blocks — insert blocks INTO an existing script (no new stack is created)\n{"type":"insert_blocks","targetId":"b4","position":"after","blocks":"control_wait 0.5\\nlooks_nextcostume"}\n- position "after"      → directly below the anchor block (default)\n- position "before"     → directly above the anchor block (not allowed on a hat block)\n- position "body_start" → as the first block inside the anchor C-block\'s body\n- position "body_end"   → as the last block inside the anchor C-block\'s body\n- add "branch":"else" with body_start/body_end to target the else branch of control_if_else\n- "blocks" is body DSL text; it must NOT start with a hat block\nUse this instead of add_script whenever the user asks to add something to existing code —\nit keeps one script instead of leaving a second disconnected stack on the workspace.\n\n3. delete_block — remove a block by tid\n{"type":"delete_block","sprite":"Cat","targetId":"b2","mode":"with_children"}\n- mode "with_children" (default) removes the block plus its body and everything below it\n- mode "block_only" removes just that block and reconnects its neighbours\n\n4. modify_input — change one input of an existing block\n{"type":"modify_input","sprite":"Cat","targetId":"b2","inputName":"TIMES","value":20}\n- value may be a number, a string, or a reporter as {"opcode":"...","inputs":{...}}\n- inputName must be one of the argument names listed for that opcode\n- for SUBSTACK / SUBSTACK2 you may pass DSL text to replace the whole body\n\n5. add_comment — attach a comment to a block, or place a free-floating one\n{"type":"add_comment","sprite":"Cat","targetId":"b3","text":"jump logic","minimized":false}\n{"type":"add_comment","sprite":"Cat","x":200,"y":100,"text":"TODO: collision"}\n- returns data.commentId; keep it if you might delete that comment later\n- commenting your code is encouraged; Chinese text is fine\n\n6. delete_comment — remove a comment\n{"type":"delete_comment","sprite":"Cat","targetId":"b3"}\n{"type":"delete_comment","sprite":"Cat","commentId":"_ai_cmt_123_abc"}\n\n7. explain — show a short explanation to the user (changes nothing)\n{"type":"explain","text":"Raised the repeat count to 20."}\n\n=== CUSTOM BLOCKS ===\nA "define" hat line declares a custom block: barewords form its name, (name) adds a\ntext/number argument, <name> adds a boolean argument, and warp=true is optional. Inside\nthe define body, reference arguments as %name:\n\n    define walk (steps) <fast>\n      motion_movesteps %steps\n\nCall it by its raw proccode (placeholders included) with one argument per placeholder:\ncall "walk %s %b" 10 (operator_gt (sensing_timer) 5). If the user already has custom\nblocks (check the context or get_sprite_scripts), prefer calling them over writing a\nnew define.\n\n=== VALIDATION ===\nScripts are checked BEFORE anything is applied. If a check fails, nothing is created and you\nget the exact reason back — read it and fix that specific problem rather than retrying the\nsame text. Rejections happen for: unknown opcodes, a hat block used anywhere but the first\nline, too many arguments, blocks indented under a block that has no body, and "else" on a\nblock without an else branch. You may also get warnings (empty C-block body, a costume or\nsound name that does not exist, a number slot given text); those still apply, but check them.\n\n=== VARIABLES, LISTS AND MESSAGES ===\n- $name and @name auto-create the variable or list on the Stage if it does not exist yet.\n- Broadcast messages are auto-created the same way; just use the message name.\n- Prefer create_variable / create_list when you want to be explicit about ownership.\n\n=== BLOCK DICTIONARY (generated from the editor schema — these signatures are exact) ===\nEach line is: opcode <arg1> <arg2> …  — write the arguments in exactly this order.\n$name = variable, @name = list, "text" = string, bare number = number, (opcode …) = nested reporter.\n[C] marks a C-block: put its body on the following lines, indented two more spaces.\n\nMotion:\n  motion_changexby DX:num\n  motion_changeyby DY:num\n  motion_direction\n  motion_glidesecstoxy SECS:num X:num Y:num\n  motion_glideto SECS:num TO:"_mouse_"|"_random_"|"<sprite name>"\n  motion_goto TO:"_mouse_"|"_random_"|"<sprite name>"\n  motion_gotoxy X:num Y:num\n  motion_ifonedgebounce\n  motion_movesteps STEPS:num\n  motion_pointindirection DIRECTION:num\n  motion_pointtowards TOWARDS:"_mouse_"|"_random_"|"<sprite name>"\n  motion_setrotationstyle STYLE:"left-right"|"don\'t rotate"|"all around"\n  motion_setx X:num\n  motion_sety Y:num\n  motion_turnleft DEGREES:num\n  motion_turnright DEGREES:num\n  motion_xposition\n  motion_yposition\n\nLooks:\n  looks_backdropnumbername NUMBER_NAME:"number"|"name"\n  looks_changeeffectby EFFECT:"COLOR"|"FISHEYE"|"WHIRL"|"PIXELATE"|"MOSAIC"|"BRIGHTNESS"|"GHOST" CHANGE:num\n  looks_changesizeby CHANGE:num\n  looks_changestretchby CHANGE:num\n  looks_cleargraphiceffects\n  looks_costumenumbername NUMBER_NAME:"number"|"name"\n  looks_goforwardbackwardlayers FORWARD_BACKWARD:"forward"|"backward" NUM:num\n  looks_gotofrontback FRONT_BACK:"front"|"back"\n  looks_hide\n  looks_nextbackdrop\n  looks_nextcostume\n  looks_say MESSAGE:text\n  looks_sayforsecs MESSAGE:text SECS:num\n  looks_seteffectto EFFECT:"COLOR"|"FISHEYE"|"WHIRL"|"PIXELATE"|"MOSAIC"|"BRIGHTNESS"|"GHOST" VALUE:num\n  looks_setsizeto SIZE:num\n  looks_setstretchto STRETCH:num\n  looks_show\n  looks_size\n  looks_switchbackdropto BACKDROP:"<backdrop name>"|"next backdrop"|"previous backdrop"|"random backdrop"\n  looks_switchbackdroptoandwait BACKDROP:"<backdrop name>"\n  looks_switchcostumeto COSTUME:"<costume name>"\n  looks_think MESSAGE:text\n  looks_thinkforsecs MESSAGE:text SECS:num\n\nSound:\n  sound_changeeffectby EFFECT:"PITCH"|"PAN" VALUE:num\n  sound_changevolumeby VOLUME:num\n  sound_cleareffects\n  sound_play SOUND_MENU:"<sound name>"\n  sound_playuntildone SOUND_MENU:"<sound name>"\n  sound_seteffectto EFFECT:"PITCH"|"PAN" VALUE:num\n  sound_setvolumeto VOLUME:num\n  sound_stopallsounds\n  sound_volume\n\nEvents:\n  event_broadcast "message"\n  event_broadcastandwait "message"\n  event_whenbackdropswitchesto BACKDROP:"<backdrop name>"\n  event_whenbroadcastreceived "message"\n  event_whenflagclicked\n  event_whengreaterthan WHENGREATERTHANMENU:"LOUDNESS"|"TIMER" VALUE:num\n  event_whenkeypressed KEY_OPTION:"space"|"up arrow"|"down arrow"|"right arrow"|"left arrow"|"any"|"a"|"b"|"c"|"d"|"e"|"f"|"g"|"h"|"i"|"j"|"k"|"l"|"m"|"n"|"o"|"p"|"q"|"r"|"s"|"t"|"u"|"v"|"w"|"x"|"y"|"z"|"0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"\n  event_whenstageclicked\n  event_whenthisspriteclicked\n\nControl:\n  control_all_at_once  [C]\n  control_clear_counter\n  control_create_clone_of CLONE_OPTION:"_myself_"|"<sprite name>"\n  control_delete_this_clone\n  control_for_each $var VALUE:num  [C]\n  control_forever  [C]\n  control_get_counter\n  control_if CONDITION:bool  [C]\n  control_if_else CONDITION:bool  [C + else]\n  control_incr_counter\n  control_repeat TIMES:num  [C]\n  control_repeat_until CONDITION:bool  [C]\n  control_start_as_clone\n  control_stop STOP_OPTION:"all"|"this script"|"other scripts in sprite"  [C]\n  control_wait DURATION:num\n  control_wait_until CONDITION:bool\n  control_while CONDITION:bool  [C]\n\nSensing:\n  sensing_answer\n  sensing_askandwait QUESTION:text\n  sensing_coloristouchingcolor COLOR:"#rrggbb" COLOR2:"#rrggbb"\n  sensing_current CURRENTMENU:"YEAR"|"MONTH"|"DATE"|"DAYOFWEEK"|"HOUR"|"MINUTE"|"SECOND"\n  sensing_dayssince2000\n  sensing_distanceto DISTANCETOMENU:"_mouse_"|"<sprite name>"\n  sensing_keypressed KEY_OPTION:"space"|"up arrow"|"down arrow"|"right arrow"|"left arrow"|"any"|"a"|"b"|"c"|"d"|"e"|"f"|"g"|"h"|"i"|"j"|"k"|"l"|"m"|"n"|"o"|"p"|"q"|"r"|"s"|"t"|"u"|"v"|"w"|"x"|"y"|"z"|"0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9"\n  sensing_loudness\n  sensing_mousedown\n  sensing_mousex\n  sensing_mousey\n  sensing_of PROPERTY:"x position"|"y position"|"direction"|"costume #"|"costume name"|"size"|"volume"|"backdrop #"|"backdrop name" OBJECT:"_stage_"|"<sprite name>"\n  sensing_resettimer\n  sensing_setdragmode DRAG_MODE:"draggable"|"not draggable"\n  sensing_timer\n  sensing_touchingcolor COLOR:"#rrggbb"\n  sensing_touchingobject TOUCHINGOBJECTMENU:"_mouse_"|"_edge_"|"<sprite name>"\n  sensing_username\n\nOperators:\n  operator_add NUM1:num NUM2:num\n  operator_and OPERAND1:bool OPERAND2:bool\n  operator_contains STRING1:text STRING2:text\n  operator_divide NUM1:num NUM2:num\n  operator_equals OPERAND1:text OPERAND2:text\n  operator_gt OPERAND1:text OPERAND2:text\n  operator_join STRING1:text STRING2:text\n  operator_length STRING:text\n  operator_letter_of LETTER:num STRING:text\n  operator_lt OPERAND1:text OPERAND2:text\n  operator_mathop OPERATOR:"abs"|"floor"|"ceiling"|"sqrt"|"sin"|"cos"|"tan"|"asin"|"acos"|"atan"|"ln"|"log"|"e ^"|"10 ^" NUM:num\n  operator_mod NUM1:num NUM2:num\n  operator_multiply NUM1:num NUM2:num\n  operator_not OPERAND:bool\n  operator_or OPERAND1:bool OPERAND2:bool\n  operator_random FROM:num TO:num\n  operator_round NUM:num\n  operator_subtract NUM1:num NUM2:num\n\nVariables & Lists:\n  data_addtolist ITEM:text @list\n  data_changevariableby $var VALUE:num\n  data_deletealloflist @list\n  data_deleteoflist INDEX:num @list\n  data_hidelist @list\n  data_hidevariable $var\n  data_insertatlist ITEM:text INDEX:num @list\n  data_itemnumoflist ITEM:text @list\n  data_itemoflist INDEX:num @list\n  data_lengthoflist @list\n  data_listcontainsitem @list ITEM:text\n  data_replaceitemoflist INDEX:num @list ITEM:text\n  data_setvariableto $var VALUE:text\n  data_showlist @list\n  data_showvariable $var\n\nPen (extension):\n  pen_changePenColorParamBy COLOR_PARAM:"color"|"saturation"|"brightness"|"transparency" VALUE:num\n  pen_changePenSizeBy SIZE:num\n  pen_clear\n  pen_penDown\n  pen_penUp\n  pen_setPenColorParamTo COLOR_PARAM:"color"|"saturation"|"brightness"|"transparency" VALUE:num\n  pen_setPenColorToColor COLOR:"#rrggbb"\n  pen_setPenSizeTo SIZE:num\n  pen_stamp\n\nOther:\n  argument_reporter_boolean VALUE:"name"\n  argument_reporter_string_number VALUE:"name"\n\n=== SPRITES, VARIABLES AND LISTS ===\nRead before you write. list_sprites / list_variables / list_lists / get_list tell you exactly\nwhat exists; guessing a name and getting an error back costs a whole extra round trip.\n\nScope rule for variables and lists: omit sprite_name and it lives on the Stage and is GLOBAL\n(every sprite can use it) — that is the right default. Pass sprite_name only for state that\ngenuinely belongs to one sprite, such as per-clone health. Reads look on the sprite first and\nthen fall back to the Stage, exactly like Scratch, so passing sprite_name never prevents you\nfrom reaching a global. Every result reports the scope it actually used, so check it rather\nthan assuming.\n\nSprites:\n- list_sprites — everything about every sprite plus the Stage; no arguments\n- add_sprite — add from the built-in library by name/keyword. Scratch may append a number if\n  the name is taken; the result tells you the real name, so use that afterwards.\n- duplicate_sprite — copy a sprite with its scripts, costumes and local variables. new_name\n  is optional; without it Scratch auto-numbers and the result reports the name it chose.\n- rename_sprite — blocks that reference the sprite are updated for you\n- delete_sprite — also destroys its scripts, costumes and local variables; the result lists\n  what was removed, so read it before reporting success\n- set_sprite_property — x, y, size, direction, visible, draggable, rotation_style in one call.\n  Out-of-range numbers are clamped by Scratch and reported in warnings.\n\nVariables:\n- create_variable — value type follows Scratch: numeric strings become numbers. Returns\n  existed:true if it was already there instead of failing.\n- set_variable / get_variable — set_variable returns the previous value too\n- rename_variable / delete_variable — delete_variable refuses while blocks still reference\n  the variable and names the sprites using it; pass force:true only if you truly mean it\n- Names are unique per scope across both kinds: you cannot have a variable and a list called\n  the same thing in the same scope, and the tools say so instead of silently doing the wrong\n  thing.\n\nLists (indices are 1-based; "first" and "last" work wherever an index is taken):\n- create_list — pass items to fill it at creation\n- get_list — read the contents; do this before editing so your indices are right\n- add_to_list — item for one value, items for an array to append several at once\n- insert_to_list — insert at a position, pushing later items down (length+1 appends)\n- set_list_item — replace the value at one position\n- delete_from_list — remove one item; index "all" empties the list\n- clear_list — empty it while keeping the list itself\nEvery list-editing result includes the new length and a preview of the contents, so you do\nnot need a follow-up get_list just to confirm what happened.\n\n=== PROHIBITED ===\n- Do NOT use an opcode that is not in the dictionary above\n- Do NOT reorder a block\'s arguments; the DSL is positional\n- Do NOT put a hat block anywhere except the first line of a script\n- Do NOT use Scratch\'s internal array format like [1,[4,"10"]]\n- Do NOT invent tids; only use tids from the context\n- Do NOT print block code or JSON in your chat reply — it belongs in the tool call\n\n=== OTHER TOOLS ===\nProject & code: get_project_info, get_sprite_scripts, click_green_flag, rename_project,\nset_stage_size, get_stage_screenshot.\nSprites: list_sprites, add_sprite, add_sprite_from_url, duplicate_sprite, rename_sprite,\ndelete_sprite, set_sprite_property, change_costume, add_costume_from_url,\nadd_backdrop, change_backdrop.\nVariables: list_variables, create_variable, get_variable, set_variable, rename_variable,\ndelete_variable.\nLists: list_lists, create_list, get_list, add_to_list, insert_to_list, set_list_item,\ndelete_from_list, clear_list.\nExtensions & misc: get_installed_extensions, search_extensions, develop_extension,\ninstall_extension, delete_extension, web_search, get_system_time, get_system_info, pause_output, ask_user.\n\n- get_sprite_scripts: read a sprite\'s existing scripts back as DSL text. Use it before\n  editing unfamiliar code so you insert in the right place.\n- add_costume_from_url / add_sprite_from_url: add art from an image URL\n- get_stage_screenshot: capture the stage as a PNG; for vision models it is added to the\n  conversation as an image so you can look at the result of your own changes\n- develop_extension: write and load a custom extension at runtime (extension_code,\n  extension_name). extension_code must be a bare class or object literal — e.g.\n  "class MyExt { getInfo(){ return {id:"myext", name:"My Ext", blocks:[{opcode:"go", blockType:"command", text:"go [N]", arguments:{N:{type:"number", defaultValue:1}}}]}; } go(args){ /* ... */ } }"\n  — do NOT prefix it with "const X =" and do NOT call Scratch.extensions.register yourself;\n  the editor wraps and registers it. getInfo() must return an object with id, name, blocks.\n- delete_extension: remove an extension YOU (the AI) added earlier via install_extension or\n  develop_extension (params: extension_id or extension_name). You can ONLY delete extensions\n  you added yourself — built-in extensions and extensions the user added manually are protected\n  and the tool will refuse to delete them. To clean up, call get_installed_extensions to find\n  the exact id/name, then delete_extension with it. Its blocks are removed from the palette.\n- web_search: look up techniques, formulas or documentation on the internet\n- pause_output: pause for 1-60 seconds with a visible countdown (seconds, reason)\n- ask_user: 当用户的要求过于笼统、模糊或存在多种可能解释时，向用户提问以澄清意图（params: question 问题文本, options 2-4 个选项字符串数组）。会渲染一张交互式卡片，用户可点选某个选项或点"其他"输入自定义文本，结果作为工具返回值传回。仅在确实需要澄清时使用，明确具体的请求应直接执行，不要滥用。\n\n=== THINKING AND OUTPUT DISCIPLINE ===\n- Keep your reasoning SHORT. A brief plan (a few sentences) is enough, even for open-ended\n  tasks — start acting with tool calls and adjust from the results instead of thinking\n  through every detail up front.\n- After reasoning you MUST emit either tool calls or a text answer. NEVER end a turn with\n  an empty response; if there is truly nothing to do, reply with one short sentence saying\n  so.\n\n=== TODO LIST WORKFLOW (IMPORTANT) ===\nFor multi-step or complex tasks, plan and execute step by step:\n1. Call plan_todos(items: ["step 1", "step 2", ...], title: "optional title") first.\n2. Then do ONE item at a time: update_todo(index: i, status: "doing"), do the work, then\n   update_todo(index: i, status: "done").\n3. Move on only after the current item is done; the card updates in real time.\n4. Do NOT cram every step into a single execute_operations call.\n5. Simple single-step tasks do not need a todo list.\n\n=== WORKING ON EXISTING CODE ===\nWhen the user asks to modify or extend code that already exists, read it first with\nget_sprite_scripts or the context, then use insert_blocks / modify_input / delete_block on\nthe specific tids. Rebuilding a whole script with add_script when the user asked for a small\nchange loses their layout and leaves duplicate stacks behind.\n\nReply in ' + lang + '.';
+        return desc + wfSection;
     }
 
     function fetchProjectCode() {
@@ -10231,6 +11982,7 @@
     function isTransientStreamFailure(err) {
         if (!err) return true;
         if (err.name === 'AbortError') return false;
+        if (err.noRetry) return false;
         if (err.status) return err.status === 408 || err.status === 429 || err.status >= 500;
         return true;
     }
@@ -10273,6 +12025,24 @@
                 httpErr.status = resp.status;
                 throw httpErr;
             });
+            // 有些网关用 HTTP 200 应答出错内容：One API / New API 类中转对不带 /v1
+            // 前缀的 /chat/completions 会回控制台 HTML；也见 200 + JSON 错误体的。
+            // 按流解析永远出不了对话分片，只会空响应进入断连重试空转 —— 这里先按
+            // content-type 拦下，标为不可重试，直接把原因呈现给用户。
+            var respCT = String((resp.headers && resp.headers.get('content-type')) || '');
+            if (/text\/html/i.test(respCT)) {
+                var htmlErr = new Error('端点返回了网页而非对话接口（HTTP 200 + text/html）。常见于 One API / New API 类中转：接口地址应为 https://主机名/v1/chat/completions（带 /v1 前缀）');
+                htmlErr.noRetry = true;
+                throw htmlErr;
+            }
+            if (/json/i.test(respCT)) {
+                return resp.json().catch(function() { return {}; }).then(function(e) {
+                    var jsonMsg = (e && e.error && ((e.error.message || e.error.type) || JSON.stringify(e.error))) || '';
+                    var jsonErr = new Error(jsonMsg || '端点返回了 JSON 而非 SSE 流（HTTP 200），请核对接口地址（如 https://主机名/v1/chat/completions）');
+                    jsonErr.noRetry = true;
+                    throw jsonErr;
+                });
+            }
             var reader = resp.body.getReader();
             var decoder = new TextDecoder();
             var buf = '';
@@ -10345,10 +12115,12 @@
     }
 
     // sourceHistory 可选：生成回合续跑时传本回合所属会话的消息，防止用户
-    // 中途切走后拿错账本；不传则按当前视图的 chatHistory 构建
-    function buildApiMessages(sourceHistory) {
+    // 中途切走后拿错账本；不传则按当前视图的 chatHistory 构建。
+    // wfState 可选：本回合所属会话的工作流状态（决定系统提示里追加的工作流规则）
+    function buildApiMessages(sourceHistory, wfState) {
         var history = sourceHistory || chatHistory;
-        var systemPrompt = buildSystemPrompt();
+        var wf = normalizeWorkflow(wfState !== undefined ? wfState : ((getActiveConv() || {}).workflow));
+        var systemPrompt = buildSystemPrompt(wf);
         var apiMessages = [{ role: 'system', content: systemPrompt }];
         var ctxLimit = getContextLimit();
         var tokenBudget = Math.floor(ctxLimit * 0.8);
@@ -10437,8 +12209,9 @@
         } catch(e) { /* silent */ }
     }
 
-    function sendMessage(previousMessages) {
-        if (!previousMessages && isLoading) {
+    function sendMessage(previousMessages, synthetic) {
+        var isSynthetic = !!synthetic;
+        if (!previousMessages && !isSynthetic && isLoading) {
             // 全局同时只跑一条生成；在别的会话里点发送要明确告知，不能静默吞掉
             showToast(t('sendWhileGenerating'), 'error');
             return;
@@ -10447,7 +12220,7 @@
 
         // 远程端不自己调模型：把文本交给桌面，等桌面把新状态推回来
         if (IS_REMOTE) {
-            if (!isInitial) return;
+            if (!isInitial || isSynthetic) return;
             var remoteText = messageInput.value.trim();
             var remoteImages = pendingImages.slice();
             if (!remoteText && !remoteImages.length) return;
@@ -10478,52 +12251,87 @@
         }
 
         if (isInitial) {
-            var content = messageInput.value.trim();
-            if (!content && pendingImages.length === 0 && pendingFiles.length === 0) return;
-            if (!currentConfig.apiKey) { showToast('Configure API Key first', 'error'); openSettings(); return; }
+            var conv = isSynthetic
+                ? conversations.find(function(c) { return c.id === (synthetic.convId || activeConversationId); })
+                : getActiveConv();
+            if (isSynthetic && !conv) return;
+            var content;
+            var displayContent;
+            var images = [];
+            if (isSynthetic) {
+                // 工作流合成消息（确认执行 / Goal 续跑）：不发输入框内容
+                content = synthetic.content;
+                displayContent = synthetic.display || content;
+            } else {
+                content = messageInput.value.trim();
+                if (!content && pendingImages.length === 0 && pendingFiles.length === 0) return;
+                if (!currentConfig.apiKey) { showToast('Configure API Key first', 'error'); openSettings(); return; }
+                images = pendingImages.slice();
+                displayContent = content;
 
-            var titleSeed = content;
-            var fileBlock = '';
-            pendingFiles.forEach(function(f) {
-                if (f.loading || f.error) return;
-                var t = f.text || '';
-                if (t.length > 8000) t = t.substring(0, 8000) + '\n[文件内容已截断]';
-                fileBlock += '附件：' + f.name + '\n' + t + '\n';
-            });
-            if (fileBlock) {
-                content = fileBlock + content;
-            }
+                var titleSeed = content;
+                var fileBlock = '';
+                pendingFiles.forEach(function(f) {
+                    if (f.loading || f.error) return;
+                    var t = f.text || '';
+                    if (t.length > 8000) t = t.substring(0, 8000) + '\n[文件内容已截断]';
+                    fileBlock += '附件：' + f.name + '\n' + t + '\n';
+                });
+                if (fileBlock) {
+                    content = fileBlock + content;
+                }
 
-            var msg = { role: 'user', content: content, time: formatTime(new Date()), images: pendingImages.length > 0 ? pendingImages.slice() : undefined };
-            var wasFirstMessage = chatHistory.length === 0;
-            chatHistory.push(msg);
-            saveCurrentConversation();
-            if (wasFirstMessage) {
-                var currentConv = conversations.find(function(c) { return c.id === activeConversationId; });
-                if (currentConv && currentConv.title === t('untitledChat')) {
-                    generateConversationTitle(activeConversationId, titleSeed);
+                // 工作流：初始化/接续会话工作流，并给发往 API 的消息加指令前缀
+                var wfOut = conv ? wfBeginTurnForOutgoingMessage(conv, content) : null;
+                if (wfOut) {
+                    content = wfOutgoingDirective(wfOut) + content;
                 }
             }
-            // 新提问开始，收起上一轮残留的过程分组
-            finalizeProcessGroup();
-            activeTodoCard = null;
-            appendUserMessage(content, msg.time, msg.images, true);
-            phoneClearStream();
-            phonePushHistory();
-            messageInput.value = '';
-            autoResize();
-            updateSendBtn();
-            pendingImages = [];
-            renderImagePreview();
-            pendingFiles = [];
-            renderFilePreview();
+
+            var msg = { role: 'user', content: content, time: formatTime(new Date()), images: images.length > 0 ? images : undefined };
+            if (isSynthetic) {
+                // 合成消息写回所属会话（用户可能已切走，参考 pushGeneratingMessage 双写逻辑）
+                var targetVisible = conv.id === activeConversationId;
+                conv.messages.push(msg);
+                conv.updatedAt = Date.now();
+                saveConversations();
+                if (targetVisible) chatHistory.push(msg);
+                finalizeProcessGroup();
+                activeTodoCard = null;
+                if (targetVisible) appendUserMessage(displayContent, msg.time, null, true);
+                phoneClearStream();
+                phonePushHistory();
+            } else {
+                var wasFirstMessage = chatHistory.length === 0;
+                chatHistory.push(msg);
+                saveCurrentConversation();
+                if (wasFirstMessage) {
+                    var currentConv = conversations.find(function(c) { return c.id === activeConversationId; });
+                    if (currentConv && currentConv.title === t('untitledChat')) {
+                        generateConversationTitle(activeConversationId, titleSeed);
+                    }
+                }
+                // 新提问开始，收起上一轮残留的过程分组
+                finalizeProcessGroup();
+                activeTodoCard = null;
+                appendUserMessage(displayContent, msg.time, msg.images, true);
+                phoneClearStream();
+                phonePushHistory();
+                messageInput.value = '';
+                autoResize();
+                updateSendBtn();
+                pendingImages = [];
+                renderImagePreview();
+                pendingFiles = [];
+                renderFilePreview();
+            }
 
             // 记下本回合所属会话：运行中用户仍可能切走，工具调用的待办要记对账本
-            sidebarTodoStreamingConvId = activeConversationId;
+            sidebarTodoStreamingConvId = conv.id;
             isLoading = true;
             generationAbortRequested = false;
-            setGeneratingConv(activeConversationId);
-            showTypingIndicator();
+            setGeneratingConv(conv.id);
+            if (isViewingGeneratingConv()) showTypingIndicator();
         }
 
         fetchProjectCode().then(function() {
@@ -10545,7 +12353,13 @@
             if (previousMessages && Array.isArray(previousMessages)) {
                 apiMessages = previousMessages;
             } else {
-                var built = buildApiMessages();
+                var built;
+                if (isSynthetic && conv.id !== activeConversationId) {
+                    // 后台续跑：按所属会话的账本构建，而不是当前视图
+                    built = buildApiMessages(conv.messages, conv.workflow);
+                } else {
+                    built = buildApiMessages(null, (getActiveConv() || {}).workflow);
+                }
                 apiMessages = built.messages;
                 currentRequestTokens = built.tokenCount;
             }
@@ -10619,13 +12433,16 @@
                 }
                 finalizeProcessGroup();
                 var em = { role: 'assistant', content: 'Error: ' + (exhausted ? t('streamRetryExhausted') : '') + detail, time: formatTime(new Date()) };
-                // 先落定本地状态再推快照，否则手机端收到的最后一份快照仍是
-                // loading=true，会被永久卡在打字动画与停止键上（电脑端已不再推送）
+                // 先记账/渲染、后清 generatingConvId：pushGeneratingMessage 与
+                // isGeneratingConvVisible 都依赖“生成里的会话还挂着”，顺序反了
+                // 报错就会被整条吞掉（不写进会话也不渲染，用户只看到空气）。
+                // isLoading/abortController 先归位，是为了手机端最后收到的快照
+                // 带上 loading=false，不会被永久卡在打字动画与停止键上
                 isLoading = false;
                 abortController = null;
-                setGeneratingConv(null);
                 pushGeneratingMessage(em);
                 if (isGeneratingConvVisible()) appendAIMessage(em.content, em.time, '', [], true);
+                setGeneratingConv(null);
                 phoneClearStream();
                 notifySidebarTodoTurnEnd();
                 phonePushHistory();
@@ -10806,7 +12623,7 @@
                         // Step 3: Now buildApiMessages (history has complete assistant.tool_calls + tool pairs)
                         // 消息源取本回合所属会话，用户中途切走也不会拿错账本
                         var runConv = getGeneratingConv();
-                        var built2 = buildApiMessages(runConv ? runConv.messages : chatHistory);
+                        var built2 = buildApiMessages(runConv ? runConv.messages : chatHistory, runConv ? runConv.workflow : undefined);
                         var toolMessages = built2.messages;
                         currentRequestTokens = built2.tokenCount;
 
@@ -10877,6 +12694,9 @@
                     pushGeneratingMessage(aiMsg);
                     isLoading = false;
                     abortController = null;
+                    // 工作流钩子要在 generatingConvId 清空之前跑：它需要知道本回合
+                    // 属于哪个会话（解析文档标记 / 目标状态，必要时自动续跑）
+                    handleWorkflowTurnEnd(result.content);
                     setGeneratingConv(null);
                     notifySidebarTodoTurnEnd();
                     phoneClearStream();
@@ -10890,11 +12710,12 @@
             var typingEl = document.getElementById('typingIndicator');
             if (typingEl) typingEl.remove();
             var em = { role: 'assistant', content: 'Error: ' + err.message, time: formatTime(new Date()) };
-            // 先落定本地状态再推快照，保证手机端最后收到的是 loading=false 的状态
+            // 同 finishWithError：先记账/渲染，再清 generatingConvId，否则报错被吞
             isLoading = false;
-            setGeneratingConv(null);
+            abortController = null;
             pushGeneratingMessage(em);
             if (isGeneratingConvVisible()) appendAIMessage(em.content, em.time, '', [], true);
+            setGeneratingConv(null);
             phoneClearStream();
             notifySidebarTodoTurnEnd();
             phonePushHistory();
@@ -10939,8 +12760,10 @@
             if (!sendBtn.disabled) sendMessage();
         });
         if (messageInput) {
-            messageInput.addEventListener('input', function() { updateSendBtn(); autoResize(); });
+            messageInput.addEventListener('input', function() { updateSendBtn(); autoResize(); handleWorkflowInput(); });
             messageInput.addEventListener('keydown', function(e) {
+                // "/" 工作流弹窗打开时优先消费方向键/回车/Escape
+                if (handleWorkflowPopupKeydown(e)) return;
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
                     if (isLoading) {
@@ -10951,6 +12774,10 @@
                     }
                     if (!sendBtn.disabled) sendMessage();
                 }
+            });
+            messageInput.addEventListener('blur', function() {
+                // 失焦稍延迟关闭，给弹窗项的 click 留时间触发
+                setTimeout(function() { if (wfPopupOpen) closeWorkflowPopup(); }, 150);
             });
         }
         if (settingsBtn) settingsBtn.addEventListener('click', function() { settingsOpen ? closeSettings() : openSettings(); });
@@ -11018,6 +12845,17 @@
             if (modelDropdownOpen && !modelDropdown.contains(e.target) && e.target !== modelSelectBtn && !modelSelectBtn.contains(e.target)) closeModelDropdown();
             if (configMenuOpen && configMenu && !configMenu.contains(e.target) && e.target !== configBtn && !configBtn.contains(e.target)) closeConfigMenu();
             if (dockAttachOpen && dockAttachMenu && !dockAttachMenu.contains(e.target) && e.target !== dockPlusBtn && !dockPlusBtn.contains(e.target)) closeDockAttachMenu();
+            // 点击输入区以外的地方关闭 "/" 工作流弹窗
+            if (wfPopupOpen) {
+                var popupEl = document.getElementById('workflowPopup');
+                if (popupEl && !popupEl.contains(e.target) && e.target !== messageInput) closeWorkflowPopup();
+            }
+        });
+        var wfChipClearBtn = document.getElementById('workflowChipClear');
+        if (wfChipClearBtn) wfChipClearBtn.addEventListener('click', function(e) {
+            e.stopPropagation();
+            setPendingWorkflow('none');
+            showToast(t('wfToastWorkflowOff'), 'success');
         });
 
         // 撤销按钮所在的总结会被反复重建，故用事件委托而不是逐个绑定
@@ -11179,6 +13017,11 @@
             feImage.setAttribute('preserveAspectRatio', 'none');
             feImage.setAttribute('x', '0');
             feImage.setAttribute('y', '0');
+            // 占位 href：不带 href 的 feImage 会让 Chromium 顶起一次名为 "" 的资源
+            // 请求，而 Electron 内部 logSecurityWarnings 对资源名做 new URL('') 会
+            // 抛 "Failed to construct 'URL'" 的未处理 Promise 错误刷进控制台。
+            // 首帧 applyPane 会立刻把 href 覆盖成真实透镜贴图，占位值不影响渲染。
+            feImage.setAttribute('href', 'data:,');
             var feDisp = document.createElementNS(SVG_NS, 'feDisplacementMap');
             feDisp.setAttribute('in', 'SourceGraphic');
             feDisp.setAttribute('in2', 'dmap');

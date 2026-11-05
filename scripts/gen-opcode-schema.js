@@ -52,7 +52,7 @@ const MENU_ONLY = new Set([
 ]);
 
 /** 过时/内部/尚未支持的块 */
-const SKIP = /^(extension_|argument_|procedures_|motion_align_scene|motion_scroll|motion_[xy]scroll|data_listindex|looks_hideallsprites|sensing_loud$|sensing_online|sensing_userid|event_whentouchingobject|event_touchingobjectmenu)/;
+const SKIP = /^(extension_|argument_editor_|procedures_|motion_align_scene|motion_scroll|motion_[xy]scroll|data_listindex|looks_hideallsprites|sensing_loud$|sensing_online|sensing_userid|event_whentouchingobject|event_touchingobjectmenu)/;
 
 /** 无参数块：scratch-blocks 里用 appendField 而非 args0，正则扫不到 */
 const ZERO_ARG = [
@@ -69,11 +69,15 @@ const ZERO_ARG = [
 
 /**
  * 无法从 args0 正则得到的条目。
- * control_stop 用 appendField 挂下拉；control_all_at_once 的 substack 在 args1；
+ * control_stop 用 appendField 挂下拉（substack 可选：单独 "all" 合法 → optionalBody）；
+ * argument_reporter_* 用 init 里的 appendDummyInput 声明字段，args0 扫不出来；
+ * control_all_at_once 的 substack 在 args1；
  * 画笔扩展的块由 scratch-vm 在运行时注册，没有 blocks_vertical 定义。
  */
 const MANUAL = {
-  control_stop: { args: [{ name: 'STOP_OPTION', kind: 'field' }] },
+  control_stop: { args: [{ name: 'STOP_OPTION', kind: 'field' }], substack: true, optionalBody: true },
+  argument_reporter_boolean: { args: [{ name: 'VALUE', kind: 'field' }] },
+  argument_reporter_string_number: { args: [{ name: 'VALUE', kind: 'field' }] },
   control_all_at_once: { args: [], substack: true },
   looks_switchbackdroptoandwait: {
     args: [{ name: 'BACKDROP', kind: 'menu', shadow: 'looks_backdrops', menuField: 'BACKDROP' }]
@@ -242,6 +246,7 @@ function render (entries) {
     let line = `  ${e.opcode}: { args: [${args}]`;
     if (e.substack) line += ', substack: true';
     if (e.substack2) line += ', substack2: true';
+    if (e.optionalBody) line += ', optionalBody: true';
     return line + ' },';
   }).join('\n');
 }
@@ -256,7 +261,8 @@ if (process.argv.includes('--check')) {
     console.error('OPCODE_SCHEMA not found in ' + TARGET_FILE);
     process.exit(2);
   }
-  const current = src.slice(src.indexOf('\n', start) + 1, end).replace(/\s+$/, '');
+  // 工作区文件可能是 CRLF（Windows 编辑器），生成物永远是 LF：比对前归一化换行
+  const current = src.slice(src.indexOf('\n', start) + 1, end).replace(/\s+$/, '').replace(/\r\n/g, '\n');
   if (current === rendered) {
     console.log('OPCODE_SCHEMA is up to date (' + rendered.split('\n').length + ' opcodes)');
   } else {

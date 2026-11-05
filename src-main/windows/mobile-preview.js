@@ -1,4 +1,4 @@
-const {ipcMain} = require('electron');
+const {clipboard, ipcMain} = require('electron');
 const AbstractWindow = require('./abstract');
 const {APP_NAME} = require('../brand');
 const MobilePreviewServer = require('../mobile-preview-server');
@@ -42,6 +42,16 @@ class MobilePreviewWindow extends AbstractWindow {
 
     this.ipc.handle('mobile-preview-stop', async () => {
       await this.server.stop();
+      return {success: true};
+    });
+
+    this.ipc.handle('mobile-preview-copy', (event, text) => {
+      // 自定义协议不是浏览器的安全上下文，navigator.clipboard 可能不可用。
+      // 通过受限的 IPC 使用 Electron 剪贴板，避免依赖页面权限。
+      if (typeof text !== 'string' || !text) {
+        throw new Error('没有可复制的链接');
+      }
+      clipboard.writeText(text);
       return {success: true};
     });
 
@@ -148,6 +158,15 @@ class MobilePreviewWindow extends AbstractWindow {
 
   getPreload () {
     return 'mobile-preview';
+  }
+
+  handlePermissionCheck (permisson, details) {
+    // 页面里的复制链接按钮走 navigator.clipboard，默认权限策略会全部拒绝
+    return permisson === 'clipboard-sanitized-write' || super.handlePermissionCheck(permisson, details);
+  }
+
+  async handlePermissionRequest (permisson, details) {
+    return permisson === 'clipboard-sanitized-write' || super.handlePermissionRequest(permisson, details);
   }
 
   isPopup () {

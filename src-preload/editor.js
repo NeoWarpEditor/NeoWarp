@@ -46,6 +46,15 @@ contextBridge.exposeInMainWorld('EditorPreload', {
   setCodeAreaBackgroundImage: (imageData) => ipcRenderer.invoke('set-code-area-background-image', imageData),
   getStageAreaBackgroundImage: () => ipcRenderer.sendSync('get-stage-area-background-image'),
   setStageAreaBackgroundImage: (imageData) => ipcRenderer.invoke('set-stage-area-background-image', imageData),
+  // NeoWarp: 标签栏「源代码Beta」按钮显隐（编辑器设置模态框 → 外观）：
+  // 渲染前同步读取一次 + 变更推送，标签栏右侧按钮实时显隐
+  getShowSourceCodeButton: () => ipcRenderer.sendSync('get-show-source-code-button'),
+  setShowSourceCodeButton: (enabled) => ipcRenderer.invoke('set-show-source-code-button', enabled),
+  onShowSourceCodeButtonChanged: (callback) => {
+    ipcRenderer.on('show-source-code-button-changed', (event, enabled) => {
+      callback(enabled);
+    });
+  },
   getTopBarDeviceStats: () => ipcRenderer.sendSync('get-top-bar-device-stats'),
   // 右键菜单毛玻璃效果开关（桌面设置 → UI 设置）：渲染前同步读取一次 +
   // 变更推送，编辑器据此在 <html> 上写 data-ctx-menu-glass 属性

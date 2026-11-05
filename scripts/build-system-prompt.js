@@ -100,6 +100,19 @@ it keeps one script instead of leaving a second disconnected stack on the worksp
 7. explain — show a short explanation to the user (changes nothing)
 {"type":"explain","text":"Raised the repeat count to 20."}
 
+=== CUSTOM BLOCKS ===
+A "define" hat line declares a custom block: barewords form its name, (name) adds a
+text/number argument, <name> adds a boolean argument, and warp=true is optional. Inside
+the define body, reference arguments as %name:
+
+    define walk (steps) <fast>
+      motion_movesteps %steps
+
+Call it by its raw proccode (placeholders included) with one argument per placeholder:
+call "walk %s %b" 10 (operator_gt (sensing_timer) 5). If the user already has custom
+blocks (check the context or get_sprite_scripts), prefer calling them over writing a
+new define.
+
 === VALIDATION ===
 Scripts are checked BEFORE anything is applied. If a check fails, nothing is created and you
 get the exact reason back — read it and fix that specific problem rather than retrying the

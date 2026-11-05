@@ -7,6 +7,7 @@ const {getEffectiveTheme} = require('../effective-theme');
 const privilegedFetch = require('../fetch');
 const phoneSync = require('../phone-sync');
 const {registerAiModelConfigIpc} = require('../ai-model-configs');
+const {registerAiWorkflowIpc} = require('../ai-workflow-settings');
 const https = require('https');
 const http = require('http');
 const zlib = require('zlib');
@@ -433,6 +434,10 @@ class AIAssistantWindow extends AbstractWindow {
     // 统一的 AI 模型配置存储（与 SOLO、扩展编辑器、桌面设置共用）：
     // 读取/保存/广播 + 打开桌面设置窗口
     registerAiModelConfigIpc(this.ipc);
+
+    // AI 工作流设置（Plan / Spec / Goal 默认项与文档保存位置）：
+    // 读取/保存/广播 + 选目录 + 文档落盘；SOLO 继承本窗口构造函数，自动获得
+    registerAiWorkflowIpc(this.ipc);
 
     this.ipc.handle('get-sprite-library', async () => {
       if (!this.editorWindow || this.editorWindow.window.isDestroyed()) {

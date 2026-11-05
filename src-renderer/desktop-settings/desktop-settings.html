@@ -1200,6 +1200,37 @@
         letter-spacing: 0.8px;
         margin-bottom: 9px;
       }
+      .form-group-heading {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 9px;
+      }
+      .form-group-heading .form-group-label { margin-bottom: 0; }
+      .ai-fetch-models-btn {
+        flex-shrink: 0;
+        padding: 4px 9px;
+        border: 1px solid var(--input-border);
+        border-radius: 8px;
+        background: var(--accent-soft);
+        color: var(--accent);
+        font: inherit;
+        font-size: 11.5px;
+        cursor: pointer;
+      }
+      .ai-fetch-models-btn:hover { background: var(--active-bg); }
+      .ai-fetch-models-btn:disabled { opacity: 0.55; cursor: wait; }
+      .ai-custom-model-tools {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+      }
+      .ai-custom-model-tools textarea {
+        min-height: 74px;
+        resize: vertical;
+        line-height: 1.55;
+      }
       .ai-field-row { margin-bottom: 12px; }
       .ai-field-label {
         display: block;
@@ -2781,14 +2812,22 @@
           addTitle: '添加模型',
           editTitle: '编辑模型',
           groupProvider: '服务商',
-          groupModel: '模型',
+          groupModel: '模型（可多选）',
+          fetchLatestModels: '获取最新模型',
+          fetchAvailableModels: '获取可用模型',
+          fetchingModels: '正在获取模型…',
+          modelsFetched: '已获取 {count} 个模型，请勾选后保存',
+          customModelsFetched: '已获取并填入 {count} 个模型 ID',
+          modelsFetchFail: '获取模型失败',
+          modelsFetchEmpty: '接口未返回可用模型',
+          modelsFetchKeyRequired: '获取模型前请填写 API Key',
           groupEndpoint: '接口与模型 ID',
           groupCredentials: '凭据',
           fieldApiFormat: 'API 格式',
           fieldEndpoint: '接口地址',
           endpointAutoHint: '填 base URL 或完整端点均可，会自动补全 /chat/completions',
           fieldModelId: '模型 ID',
-          fieldModelIdHint: '接口实际接受的模型名称，例如 gpt-6.1-sol',
+          fieldModelIdHint: '每行填写一个模型 ID，也可用逗号分隔；保存后会生成多条模型配置',
           fieldContextLimit: '上下文上限（tokens）',
           fieldContextLimitHint: '用于在对话超长前裁剪历史',
           fieldApiKey: 'API Key',
@@ -2809,7 +2848,8 @@
           testFail: '连接失败',
           errEndpointRequired: '请填写接口地址',
           errEndpointInvalid: '接口地址不能包含空格',
-          errModelIdRequired: '请填写模型 ID',
+          errModelIdRequired: '请填写至少一个模型 ID',
+          errModelRequired: '请至少选择一个模型',
           errContextLimit: '上下文上限至少为 1000',
           errKeyRequired: '请填写 API Key',
           configSaved: '已保存',
@@ -2837,14 +2877,22 @@
           addTitle: 'Add Model',
           editTitle: 'Edit Model',
           groupProvider: 'Provider',
-          groupModel: 'Model',
+          groupModel: 'Models (multiple selection)',
+          fetchLatestModels: 'Fetch latest models',
+          fetchAvailableModels: 'Fetch available models',
+          fetchingModels: 'Fetching models…',
+          modelsFetched: 'Fetched {count} models. Select models and save.',
+          customModelsFetched: 'Fetched and filled in {count} model IDs',
+          modelsFetchFail: 'Failed to fetch models',
+          modelsFetchEmpty: 'The endpoint returned no available models',
+          modelsFetchKeyRequired: 'Enter an API Key before fetching models',
           groupEndpoint: 'Endpoint & model ID',
           groupCredentials: 'Credentials',
           fieldApiFormat: 'API format',
           fieldEndpoint: 'Endpoint',
           endpointAutoHint: 'Accepts a base URL or a full endpoint URL — /chat/completions is appended automatically',
-          fieldModelId: 'Model ID',
-          fieldModelIdHint: 'The model name expected by the endpoint, e.g. gpt-6.1-sol',
+          fieldModelId: 'Model IDs',
+          fieldModelIdHint: 'Enter one model ID per line or separate IDs with commas; each is saved as a separate config',
           fieldContextLimit: 'Context limit (tokens)',
           fieldContextLimitHint: 'Used to trim conversation history before it gets too long',
           fieldApiKey: 'API Key',
@@ -2865,7 +2913,8 @@
           testFail: 'Connection failed',
           errEndpointRequired: 'Endpoint is required',
           errEndpointInvalid: 'Endpoint must not contain spaces',
-          errModelIdRequired: 'Model ID is required',
+          errModelIdRequired: 'Enter at least one model ID',
+          errModelRequired: 'Select at least one model',
           errContextLimit: 'Context limit must be at least 1000',
           errKeyRequired: 'API Key is required',
           configSaved: 'Saved',
@@ -3305,6 +3354,8 @@
         panel.className = 'ai-dialog';
 
         const isCustomProvider = () => !!(AI_PROVIDERS[draft.provider] || {}).isCustom;
+        let dialogModels = ((AI_PROVIDERS[draft.provider] || {}).models || []).slice();
+        let selectedModels = new Set(draft.model ? [draft.model] : []);
 
         const providerGridHtml = () => Object.keys(AI_PROVIDERS)
           // 免费模型不作为“服务商”参与添加/编辑，只在模型列表中直接选用
@@ -3320,8 +3371,7 @@
         }).join('');
 
         const modelListHtml = () => {
-          const models = (AI_PROVIDERS[draft.provider] || {}).models || [];
-          return models.map((m) => {
+          return dialogModels.map((m) => {
             const meta = [];
             if (m.contextLimit) meta.push(aiFormatTokenCount(m.contextLimit) + ' ' + aiS.ctxSuffix);
             if (m.maxOutput) meta.push(aiFormatTokenCount(m.maxOutput) + ' ' + aiS.outSuffix);
@@ -3331,7 +3381,7 @@
               tags += '<span class="model-cap-tag">' + aiEscape(aiS.capVision) + '</span>';
             }
             return '<button type="button" class="model-option' +
-              (draft.model === m.id ? ' selected' : '') + '" data-model="' + aiEscape(m.id) + '">' +
+              (selectedModels.has(m.id) ? ' selected' : '') + '" data-model="' + aiEscape(m.id) + '" aria-pressed="' + selectedModels.has(m.id) + '">' +
               '<span class="model-option-body">' +
               '<span class="model-option-name">' + aiEscape(m.name) + '</span>' +
               (meta.length ? '<span class="model-option-meta">' + aiEscape(meta.join(' · ')) + '</span>' : '') +
@@ -3355,8 +3405,10 @@
           '<div class="ai-dialog-body">' +
           '<div class="form-group"><div class="form-group-label">' + aiEscape(aiS.groupProvider) + '</div>' +
           '<div class="provider-grid" id="aiProviderGrid">' + providerGridHtml() + '</div></div>' +
-          '<div class="form-group" id="aiModelGroup"><div class="form-group-label">' + aiEscape(aiS.groupModel) + '</div>' +
-          '<div class="model-option-list" id="aiModelListDialog">' + modelListHtml() + '</div></div>' +
+          '<div class="form-group" id="aiModelGroup"><div class="form-group-heading"><div class="form-group-label">' + aiEscape(aiS.groupModel) + '</div>' +
+          '<button type="button" class="ai-fetch-models-btn" id="aiFetchModelsBtn">' + aiEscape(aiS.fetchLatestModels) + '</button></div>' +
+          '<div class="model-option-list" id="aiModelListDialog">' + modelListHtml() + '</div>' +
+          '<div class="ai-field-error" id="aiModelSelectionError"></div></div>' +
           '<div class="form-group" id="aiEndpointGroup"><div class="form-group-label">' + aiEscape(aiS.groupEndpoint) + '</div>' +
           fieldRow('aiApiFormatRow', aiS.fieldApiFormat,
             '<div id="aiApiFormat" data-custom-select></div>') +
@@ -3364,7 +3416,8 @@
             '<input type="text" id="aiEndpoint" class="settings-input settings-input-mono" placeholder="https://api.example.com/v1" value="' + aiEscape(draft.customEndpoint) + '">' +
             '<div class="ai-field-hint" id="aiEndpointHint"></div>') +
           fieldRow('aiModelIdRow', aiS.fieldModelId,
-            '<input type="text" id="aiModelId" class="settings-input settings-input-mono" placeholder="gpt-6.1-sol" value="' + aiEscape(draft.customModelId) + '">',
+            '<div class="ai-custom-model-tools"><textarea id="aiModelId" class="settings-input settings-input-mono" placeholder="gpt-6.1-sol&#10;deepseek-flash" spellcheck="false">' + aiEscape(draft.customModelId) + '</textarea>' +
+            '<button type="button" class="ai-fetch-models-btn" id="aiFetchCustomModelsBtn">' + aiEscape(aiS.fetchAvailableModels) + '</button></div>',
             aiS.fieldModelIdHint) +
           fieldRow('aiCtxLimitRow', aiS.fieldContextLimit,
             '<input type="text" inputmode="numeric" id="aiCtxLimit" class="settings-input" placeholder="1000000" value="' + aiEscape(String(draft.customContextLimit)) + '">',
@@ -3421,8 +3474,9 @@
           const btn = e.target.closest('.provider-option');
           if (!btn) return;
           draft.provider = btn.dataset.provider;
-          const models = (AI_PROVIDERS[draft.provider] || {}).models || [];
-          draft.model = models[0] ? models[0].id : '';
+          dialogModels = ((AI_PROVIDERS[draft.provider] || {}).models || []).slice();
+          selectedModels = new Set(dialogModels[0] ? [dialogModels[0].id] : []);
+          draft.model = dialogModels[0] ? dialogModels[0].id : '';
           panel.querySelectorAll('.provider-option').forEach((b) => {
             b.classList.toggle('selected', b.dataset.provider === draft.provider);
           });
@@ -3435,10 +3489,16 @@
         $('#aiModelListDialog').addEventListener('click', (e) => {
           const btn = e.target.closest('.model-option');
           if (!btn) return;
-          draft.model = btn.dataset.model;
-          panel.querySelectorAll('.model-option').forEach((b) => {
-            b.classList.toggle('selected', b.dataset.model === draft.model);
-          });
+          const modelId = btn.dataset.model;
+          if (selectedModels.has(modelId)) {
+            selectedModels.delete(modelId);
+          } else {
+            selectedModels.add(modelId);
+          }
+          draft.model = modelId;
+          btn.classList.toggle('selected', selectedModels.has(modelId));
+          btn.setAttribute('aria-pressed', String(selectedModels.has(modelId)));
+          $('#aiModelSelectionError').textContent = '';
           setTestResult('', '');
         });
 
@@ -3499,7 +3559,7 @@
           let ok = true;
           const key = keyIn.value.trim();
           const endpoint = endpointIn.value.trim();
-          const modelId = modelIdIn.value.trim();
+          const modelIds = Array.from(new Set(modelIdIn.value.split(/[\s,，;；]+/).map((id) => id.trim()).filter(Boolean)));
           const ctx = parseInt(ctxIn.value.replace(/[^\d]/g, ''), 10);
 
           if (custom) {
@@ -3511,7 +3571,7 @@
               setError('#aiEndpointRow', aiS.errEndpointInvalid);
               ok = false;
             }
-            if (!modelId) {
+            if (!modelIds.length) {
               setError('#aiModelIdRow', aiS.errModelIdRequired);
               ok = false;
             }
@@ -3519,6 +3579,10 @@
               setError('#aiCtxLimitRow', aiS.errContextLimit);
               ok = false;
             }
+          }
+          if (!custom && !selectedModels.size) {
+            $('#aiModelSelectionError').textContent = aiS.errModelRequired;
+            ok = false;
           }
           if (!key) {
             setError('#aiApiKeyRow', aiS.errKeyRequired);
@@ -3529,18 +3593,23 @@
             if (firstErr) firstErr.focus();
             return null;
           }
-          const p = AI_PROVIDERS[draft.provider] || {};
-          return {
-            name: nameIn.value.trim() || aiProviderName(draft.provider) || 'Model',
+          const base = {
+            name: nameIn.value.trim(),
             provider: draft.provider,
-            model: custom ? 'custom' : draft.model,
             apiKey: key,
             apiFormat: custom ? fmtSel.value : 'openai',
             customEndpoint: custom ? normalizeCustomEndpoint(endpoint) : '',
-            customModelId: custom ? modelId : '',
             customContextLimit: custom ? ctx : 1000000,
             thinkingLevel: (cfg && cfg.thinkingLevel) || 'medium'
           };
+          return (custom ? modelIds : dialogModels.filter((m) => selectedModels.has(m.id)).map((m) => m.id)).map((modelId) => {
+            const model = dialogModels.find((m) => m.id === modelId);
+            return Object.assign({}, base, {
+              name: base.name || (custom ? modelId : ((model && model.name) || aiProviderName(draft.provider) || 'Model')),
+              model: custom ? 'custom' : modelId,
+              customModelId: custom ? modelId : ''
+            });
+          });
         }
 
         function close () {
@@ -3573,60 +3642,184 @@
           }
           return url;
         };
+
+        // 获取服务商账号当前可用的模型。OpenAI 兼容接口使用 GET /models，
+        // Anthropic 使用 GET /v1/models，Ollama 使用 GET /api/tags。
+        const fetchModels = async (custom) => {
+          const btn = $(custom ? '#aiFetchCustomModelsBtn' : '#aiFetchModelsBtn');
+          const key = keyIn.value.trim();
+          const format = custom ? fmtSel.value : 'openai';
+          clearErrors();
+          if (format !== 'ollama' && !key) {
+            setError('#aiApiKeyRow', aiS.modelsFetchKeyRequired);
+            setTestResult('fail', aiS.modelsFetchKeyRequired);
+            return;
+          }
+          let chatEndpoint;
+          if (custom) {
+            const input = endpointIn.value.trim();
+            if (!input || /\s/.test(input)) {
+              setError('#aiEndpointRow', input ? aiS.errEndpointInvalid : aiS.errEndpointRequired);
+              return;
+            }
+            chatEndpoint = normalizeCustomEndpoint(input);
+          } else {
+            chatEndpoint = (AI_PROVIDERS[draft.provider] || {}).endpoint;
+          }
+          const headers = format === 'anthropic'
+            ? {'x-api-key': key, 'anthropic-version': '2023-06-01'}
+            : (format === 'ollama' ? {} : {'Authorization': 'Bearer ' + key});
+          const suffix = format === 'anthropic' ? '/v1/messages' : (format === 'ollama' ? '/api/chat' : '/chat/completions');
+          const listPath = format === 'ollama' ? '/api/tags' : (format === 'anthropic' ? '/v1/models' : '/models');
+          const listEndpoint = chatEndpoint.replace(new RegExp(suffix.replace(/\//g, '\\/') + '$', 'i'), listPath);
+          btn.disabled = true;
+          setTestResult('busy', aiS.fetchingModels);
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 15000);
+          try {
+            const options = {method: 'GET', headers, signal: controller.signal};
+            let response;
+            try {
+              response = await fetch(buildProxyUrl(listEndpoint, headers), options);
+            } catch (error) {
+              if (error && error.name === 'AbortError') throw error;
+              response = await fetch(listEndpoint, options);
+            }
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              throw new Error((body.error && (body.error.message || body.error.type)) || ('HTTP ' + response.status));
+            }
+            const rawModels = Array.isArray(body.data) ? body.data : (Array.isArray(body.models) ? body.models : []);
+            const ids = Array.from(new Set(rawModels.map((m) => typeof m === 'string' ? m : (m.id || m.name || m.model)).filter(Boolean)));
+            if (!ids.length) throw new Error(aiS.modelsFetchEmpty);
+            if (custom) {
+              const existing = modelIdIn.value.split(/[\s,，;；]+/).map((id) => id.trim()).filter(Boolean);
+              const merged = Array.from(new Set(existing.concat(ids)));
+              modelIdIn.value = merged.join('\n');
+              setTestResult('ok', aiS.customModelsFetched.replace('{count}', ids.length));
+            } else {
+              const known = (AI_PROVIDERS[draft.provider] || {}).models || [];
+              dialogModels = ids.map((id) => Object.assign({}, known.find((m) => m.id === id) || {id, name: id}));
+              selectedModels = new Set(ids);
+              $('#aiModelListDialog').innerHTML = modelListHtml();
+              $('#aiModelSelectionError').textContent = '';
+              setTestResult('ok', aiS.modelsFetched.replace('{count}', ids.length));
+            }
+          } catch (error) {
+            const message = error && error.name === 'AbortError' ? 'timeout' : (error.message || 'network error');
+            setTestResult('fail', aiS.modelsFetchFail + ': ' + String(message).slice(0, 150));
+          } finally {
+            clearTimeout(timer);
+            btn.disabled = false;
+          }
+        };
+        $('#aiFetchModelsBtn').addEventListener('click', () => fetchModels(false));
+        $('#aiFetchCustomModelsBtn').addEventListener('click', () => fetchModels(true));
+
         $('#aiTestBtn').addEventListener('click', function () {
           const data = collect();
           if (!data) return;
-          const p = AI_PROVIDERS[data.provider] || {};
-          const endpoint = p.isCustom ? normalizeCustomEndpoint(data.customEndpoint || p.endpoint) : p.endpoint;
+          const first = data[0];
+          const p = AI_PROVIDERS[first.provider] || {};
+          const endpoint = p.isCustom ? normalizeCustomEndpoint(first.customEndpoint || p.endpoint) : p.endpoint;
           if (!endpoint) return;
-          const modelId = p.isCustom ? data.customModelId : data.model;
+          const modelId = p.isCustom ? first.customModelId : first.model;
           const btn = this;
           btn.disabled = true;
           setTestResult('busy', aiS.testing);
           const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 15000);
           const options = {
             method: 'POST',
-            headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + data.apiKey},
+            headers: {'Content-Type': 'application/json', 'Authorization': 'Bearer ' + first.apiKey},
             body: JSON.stringify({model: modelId, messages: [{role: 'user', content: 'ping'}], max_tokens: 1, stream: false}),
             signal: controller.signal
           };
-          const doFetch = () => aiProxyBroken
-            ? fetch(endpoint, options)
-            : fetch(buildProxyUrl(endpoint, options.headers), options).catch((err) => {
+          const doFetch = (url) => aiProxyBroken
+            ? fetch(url, options)
+            : fetch(buildProxyUrl(url, options.headers), options).catch((err) => {
               if (err && err.name === 'AbortError') throw err;
               aiProxyBroken = true;
-              return fetch(endpoint, options);
+              return fetch(url, options);
             });
-          doFetch().then((resp) => {
+          const zh = aiLang === 'zh';
+          // 只认 JSON / event-stream 应答：某些中转（One API / New API 等）会把
+          // 不带 /v1 的路径当成控制台首页，回 HTTP 200 + HTML；此前只看 resp.ok
+          // 会把这种响应误报成“连接成功”，等真正聊天时才发现端点不可用。
+          const contentTypeOf = (resp) => String((resp.headers && resp.headers.get('content-type')) || '');
+          const isSseOrJson = (ct) => /json|event-stream/i.test(ct);
+          const v1Endpoint = endpoint.replace(/\/chat\/completions$/i, '/v1/chat/completions');
+          const htmlHint = (zh
+            ? '（返回的是网页而非对话接口；One API / New API 类中转的接口地址应带 /v1，如 https://主机/v1/chat/completions）'
+            : ' (endpoint returned a webpage, not a chat API; One API / New API relays need /v1, e.g. https://host/v1/chat/completions)');
+          let timer = 0;
+          const armTimer = () => {
             clearTimeout(timer);
+            timer = setTimeout(() => controller.abort(), 15000);
+          };
+          const runAttempt = (url) => {
+            armTimer();
+            return doFetch(url).then((resp) => {
+              clearTimeout(timer);
+              return resp;
+            });
+          };
+          const tryHtmlFallback = (firstResp) => {
+            // 200 但不是 JSON/SSE：先自动改用 /v1/chat/completions 复测一次，
+            // 成功就把修正后的端点回填输入框，省得聊天时再踩一遍坑
+            if (v1Endpoint !== endpoint) {
+              return runAttempt(v1Endpoint).then((v1Resp) => {
+                if (v1Resp.ok && isSseOrJson(contentTypeOf(v1Resp))) {
+                  endpointIn.value = v1Endpoint;
+                  setTestResult('ok', aiS.testOk + (zh ? '（已自动改用 /v1/chat/completions）' : ' (auto-switched to /v1/chat/completions)'));
+                  return;
+                }
+                const v1Status = v1Resp.ok ? '' : (zh ? '，改用 /v1 后仍失败（HTTP ' + v1Resp.status + '）' : '; /v1 retry also failed (HTTP ' + v1Resp.status + ')');
+                setTestResult('fail', aiS.testFail + ': ' + (zh
+                  ? '端点返回' + (v1Resp.ok ? '网页' : ' HTTP ' + v1Resp.status) + '而非对话接口' + v1Status + htmlHint
+                  : 'HTTP 200 with HTML' + v1Status + htmlHint));
+              });
+            }
+            setTestResult('fail', aiS.testFail + ': ' + (zh
+              ? 'HTTP 200 但端点返回' + (contentTypeOf(firstResp) ? contentTypeOf(firstResp).split(';')[0] : '未知类型') + htmlHint
+              : 'HTTP 200 with ' + (contentTypeOf(firstResp).split(';')[0] || 'unknown type') + htmlHint));
+          };
+          runAttempt(endpoint).then((resp) => {
+            const ct = contentTypeOf(resp);
+            if (resp.ok && !isSseOrJson(ct)) return tryHtmlFallback(resp);
             if (resp.ok) {
               setTestResult('ok', aiS.testOk);
               return;
             }
             return resp.json().catch(() => ({})).then((j) => {
               const msg = (j && j.error && (j.error.message || j.error.type)) || ('HTTP ' + resp.status);
-              setTestResult('fail', aiS.testFail + ': ' + String(msg).slice(0, 120));
+              const htmlNote = /text\/html/i.test(ct) ? htmlHint : '';
+              setTestResult('fail', aiS.testFail + ': ' + htmlNote + String(msg).slice(0, 100));
             });
           }).catch((err) => {
             clearTimeout(timer);
             const msg = err && err.name === 'AbortError' ? 'timeout' : (err && err.message) || 'network error';
-            setTestResult('fail', aiS.testFail + ': ' + String(msg).slice(0, 120));
+            setTestResult('fail', aiS.testFail + ': ' + String(msg).slice(0, 150));
           }).then(() => {
             btn.disabled = false;
           });
         });
 
         $('#aiSaveBtn').addEventListener('click', () => {
-          const data = collect();
-          if (!data) return;
+          const configs = collect();
+          if (!configs) return;
           if (isEdit) {
-            Object.assign(cfg, data);
+            Object.assign(cfg, configs[0]);
+            configs.slice(1).forEach((data, index) => {
+              data.id = 'cfg_' + Date.now() + '_' + index;
+              aiConfigs.push(data);
+            });
           } else {
-            data.id = 'cfg_' + Date.now();
-            aiConfigs.push(data);
-            aiActiveId = data.id;
+            configs.forEach((data, index) => {
+              data.id = 'cfg_' + Date.now() + '_' + index;
+              aiConfigs.push(data);
+            });
           }
+          aiActiveId = configs[configs.length - 1].id;
           renderAiModelList();
           aiSaveConfigs();
           close();

@@ -1054,6 +1054,23 @@
     setStageAreaBackgroundImage: async (imageData) => {
       util.writeLocal('neowarp:stageBg', imageData || null);
     },
+    // 标签栏「源代码Beta」按钮显隐（编辑器设置模态框 → 外观）：
+    // 本地存储 + 广播，多标签页实时同步
+    getShowSourceCodeButton: () => {
+      // localStorage 会把布尔转成 "true"/"false" 字符串，这里统一解析；
+      // 未存储过时默认显示
+      var value = util.readLocal('neowarp:showSourceCodeButton', null);
+      return value === null ? true : String(value) !== 'false';
+    },
+    setShowSourceCodeButton: async (enabled) => {
+      util.writeLocal('neowarp:showSourceCodeButton', enabled !== false);
+      util.broadcast('showSourceCodeButton', enabled !== false);
+    },
+    onShowSourceCodeButtonChanged: (callback) => {
+      util.onBroadcast(function (message) {
+        if (message.type === 'showSourceCodeButton') callback(message.data);
+      });
+    },
     getGlobalUITheme: async () => storage.getSettings().uiTheme || 'system',
     onGlobalUIThemeChanged: (callback) => {
       storage.onSettingsChanged(function (key, value) {

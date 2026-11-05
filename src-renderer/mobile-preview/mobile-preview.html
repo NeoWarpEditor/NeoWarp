@@ -154,6 +154,12 @@
     min-height: 22px;
     margin-top: 12px;
   }
+  .status:empty { margin-top: 0; min-height: 0; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  button:focus-visible, .url-box:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
   .status.error { color: #ef4444; }
   .status.ok { color: #22c55e; }
   .note {
@@ -171,8 +177,8 @@
   <div class="card qr-card">
     <div id="qr"><div class="placeholder">正在启动预览服务…</div></div>
     <div class="url-row">
-      <div class="url-box" id="url">—</div>
-      <button id="copy" type="button">复制</button>
+      <div class="url-box" id="url" tabindex="0">—</div>
+      <button id="copy" type="button" disabled>复制</button>
     </div>
     <div class="alt-list" id="alt-urls" hidden></div>
   </div>
@@ -209,6 +215,7 @@
   var statusEl = document.getElementById('status');
 
   var currentURL = '';
+  var copyInFlight = false;
 
   var setStatus = function (text, kind) {
     statusEl.textContent = text || '';
@@ -256,12 +263,56 @@
     });
   };
 
+  var selectURL = function () {
+    var selection = window.getSelection();
+    var range = document.createRange();
+    range.selectNodeContents(urlEl);
+    selection.removeAllRanges();
+    selection.addRange(range);
+  };
+
+  var copyWithExecCommand = function () {
+    selectURL();
+    return document.execCommand && document.execCommand('copy');
+  };
+
   copyButton.addEventListener('click', function () {
-    if (!currentURL) return;
-    navigator.clipboard.writeText(currentURL).then(function () {
+    if (!currentURL || copyInFlight) return;
+    copyInFlight = true;
+    copyButton.disabled = true;
+    copyButton.textContent = '复制中…';
+
+    MobilePreviewPreload.copyText(currentURL).then(function () {
       setStatus('链接已复制到剪贴板', 'ok');
     }).catch(function () {
-      setStatus('复制失败，请手动选中链接复制', 'error');
+      // 兼容主进程异常或旧版本主进程，不让按钮直接失效。
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        return navigator.clipboard.writeText(currentURL).then(function () {
+          setStatus('链接已复制到剪贴板', 'ok');
+        });
+      }
+      if (copyWithExecCommand()) {
+        setStatus('链接已复制到剪贴板', 'ok');
+      } else {
+        selectURL();
+        setStatus('自动复制失败，链接已选中，请按 Ctrl+C 复制', 'error');
+      }
+    }).catch(function () {
+      try {
+        if (copyWithExecCommand()) {
+          setStatus('链接已复制到剪贴板', 'ok');
+        } else {
+          selectURL();
+          setStatus('自动复制失败，链接已选中，请按 Ctrl+C 复制', 'error');
+        }
+      } catch (error) {
+        selectURL();
+        setStatus('自动复制失败，链接已选中，请按 Ctrl+C 复制', 'error');
+      }
+    }).finally(function () {
+      copyInFlight = false;
+      copyButton.disabled = false;
+      copyButton.textContent = '复制';
     });
   });
 
@@ -280,6 +331,7 @@
     }
     currentURL = result.url;
     urlEl.textContent = result.url;
+    copyButton.disabled = false;
     renderAltURLs(result.urls);
     setStatus('预览服务已启动，端口 ' + result.port, 'ok');
     return renderQRCode(result.url);

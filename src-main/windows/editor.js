@@ -1176,6 +1176,27 @@ class EditorWindow extends ProjectRunningWindow {
       await settings.save();
     });
 
+    // NeoWarp: 编辑器标签栏「源代码Beta」按钮显隐开关（编辑器设置模态框 →
+    // 外观）。渲染前同步读取一次；设置模态框保存后广播给所有编辑器窗口，
+    // 标签栏按钮实时显隐，无需重启。
+    this.ipc.on('get-show-source-code-button', (event) => {
+      event.returnValue = settings.showSourceCodeButton;
+    });
+
+    this.ipc.handle('set-show-source-code-button', async (event, enabled) => {
+      if (typeof enabled !== 'boolean') {
+        return;
+      }
+      settings.showSourceCodeButton = enabled;
+      AbstractWindow.settingsChanged();
+      await settings.save();
+      for (const editorWindow of AbstractWindow.getWindowsByClass(EditorWindow)) {
+        if (!editorWindow.window.isDestroyed()) {
+          editorWindow.window.webContents.send('show-source-code-button-changed', enabled);
+        }
+      }
+    });
+
     this.ipc.handle('check-drag-and-drop-path', (event, filePath) => {
       FileAccessWindow.check(filePath);
     });
