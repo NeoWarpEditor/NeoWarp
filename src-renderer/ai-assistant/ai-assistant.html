@@ -849,14 +849,17 @@
         .message-wrapper.user .message-bubble:hover {
             box-shadow: 0 4px 18px rgba(0, 122, 255, 0.26);
         }
+        /* AI 回复不使用气泡容器：正文平铺展示，只有用户消息保留气泡 */
         .message-wrapper.ai .message-bubble {
-            background: var(--ai-bubble);
-            color: var(--ai-text);
-            border-bottom-left-radius: 6px;
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+            background: transparent;
+            color: var(--text);
+            border-radius: 0;
+            max-width: 100%;
+            padding: 2px 2px 0;
+            box-shadow: none;
         }
         .dark-mode .message-wrapper.ai .message-bubble {
-            box-shadow: 0 0.5px 0 rgba(255, 255, 255, 0.06) inset, 0 1px 3px rgba(0, 0, 0, 0.3);
+            box-shadow: none;
         }
 
         .user-images {
@@ -2389,6 +2392,11 @@
         .question-answer-tag svg {
             width: 14px;
             height: 14px;
+        }
+        /* 超时未回复时的中性提示标签 */
+        .question-timeout-tag {
+            background: var(--surface-secondary);
+            color: var(--text-tertiary);
         }
         .question-card-waiting {
             display: flex;
@@ -3964,6 +3972,10 @@
                 max-width: 92%;
                 font-size: 14px;
                 padding: 10px 14px;
+            }
+            .message-wrapper.ai .message-bubble {
+                max-width: 100%;
+                padding: 2px 2px 0;
             }
             .config-model-select span.model-name { display: none; }
             .config-model-select span.model-short { display: inline; }
@@ -6356,6 +6368,11 @@
     var activeTodoStepBody = null;
     var activeQuestionCard = null;
     var activeQuestionResolver = null;
+    // ask_user 问题卡的等待上限：超过后按"用户未回复"放行，让 AI 继续处理
+    var QUESTION_TIMEOUT_MS = 5 * 60 * 1000;
+    // 当前回合是否已产生过可见输出：用于让"思考中"占位只在回合开头出现一次，
+    // 后续每轮流式请求（工具调用后递归）不再重复显示"思考中"
+    var turnHasStreamOutput = false;
     // 当前回合的过程分组：工具调用/推理/待办卡片都进这里，回合结束后整体折叠
     var activeProcessGroup = null;
     var activeProcessBody = null;
@@ -9673,19 +9690,29 @@
         if (msg.name === 'ask_user') {
             // 把已存的回答回填到恢复出的问题卡片上，与关闭前的状态一致
             if (activeQuestionCard && result && result.success) {
-                var ans = String(result.answer || '');
-                var isCustom = !!result.isCustom;
-                var selectedBtn = null;
-                if (isCustom) {
-                    selectedBtn = activeQuestionCard.querySelector('.question-other-btn');
+                if (result.timedOut) {
+                    // 超时未回复：卡片定格为"用户未回复"状态
+                    if (activeQuestionCard._markTimeout) activeQuestionCard._markTimeout();
                 } else {
-                    activeQuestionCard.querySelectorAll('.question-option').forEach(function(btn) {
-                        if (btn.classList.contains('question-other-btn')) return;
-                        var label = btn.querySelector('.question-option-label');
-                        if (label && label.textContent === ans) selectedBtn = btn;
-                    });
+                    var ans = String(result.answer || '');
+                    var isCustom = !!result.isCustom;
+                    var selectedBtn = null;
+                    if (isCustom) {
+                        selectedBtn = activeQuestionCard.querySelector('.question-other-btn');
+                    } else {
+                        activeQuestionCard.querySelectorAll('.question-option').forEach(function(btn) {
+                            if (btn.classList.contains('question-other-btn')) return;
+                            var label = btn.querySelector('.question-option-label');
+                            if (label && label.textContent === ans) selectedBtn = btn;
+                        });
+                    }
+                    if (activeQuestionCard._finalizeAnswer) activeQuestionCard._finalizeAnswer(ans, isCustom, selectedBtn);
                 }
-                if (activeQuestionCard._finalizeAnswer) activeQuestionCard._finalizeAnswer(ans, isCustom, selectedBtn);
+            }
+            // 卡片归入当前过程分组（与执行时行为一致），随回合结束一起折叠；
+            // 取消未回答的卡片也一并收起
+            if (activeQuestionCard && activeProcessBody) {
+                activeProcessBody.appendChild(activeQuestionCard);
             }
             activeQuestionCard = null;
             return;
@@ -9777,6 +9804,21 @@
         activeProcessGroup = null;
         activeProcessBody = null;
         activeTodoStepBody = null;
+        if (group && group.parentNode) {
+            // 已回答/超时的问题卡也属于执行过程：回合结束时移回分组一并折叠，
+            // 界面上只留下最终的任务完成汇报
+            var fbody = group.querySelector('.process-group-body');
+            if (fbody) {
+                // 兜底清扫：仍散落在聊天区的问题卡（多轮提问等路径遗漏）一并收进
+                chatArea.querySelectorAll(':scope > .question-card').forEach(function(c) {
+                    fbody.appendChild(c);
+                });
+                if (activeQuestionCard && activeQuestionCard.parentNode && activeQuestionCard.parentNode !== fbody) {
+                    fbody.appendChild(activeQuestionCard);
+                }
+            }
+        }
+        activeQuestionCard = null;
         if (!group || !group.parentNode) return;
         if (!group.querySelector('.process-group-body').childNodes.length) {
             group.remove();
@@ -9891,7 +9933,6 @@
             }
         }
         updateTodoCardProgress(card);
-        if (typeof scrollToBottom === 'function') scrollToBottom();
     }
 
     function updateTodoCardProgress(card) {
@@ -10096,6 +10137,25 @@
         }
         // 暴露给会话恢复流程：重开窗口后回填已保存的回答
         card._finalizeAnswer = finalizeCard;
+        // 5 分钟未回复：AI 按超时继续执行，卡片定格为"用户未回复"状态
+        card._markTimeout = function() {
+            if (card.classList.contains('answered')) return;
+            card.classList.add('answered', 'timed-out');
+            var btns = card.querySelectorAll('.question-option');
+            btns.forEach(function(b) { b.disabled = true; });
+            var wrap = card.querySelector('.question-other-wrap');
+            if (wrap) { wrap.classList.remove('active'); wrap.style.display = 'none'; }
+            var input = card.querySelector('.question-other-input');
+            if (input) input.disabled = true;
+            var submitBtn = card.querySelector('.question-submit-btn');
+            if (submitBtn) submitBtn.disabled = true;
+            var waiting = card.querySelector('.question-card-waiting');
+            if (waiting) waiting.remove();
+            var tag = document.createElement('div');
+            tag.className = 'question-answer-tag question-timeout-tag';
+            tag.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><span>' + escapeHtml(isZh ? '用户未回复，AI 已继续处理' : 'No response — AI continued') + '</span>';
+            card.querySelector('.question-card-inner').appendChild(tag);
+        };
 
         var optionBtns = card.querySelectorAll('.question-option');
         var otherWrap = card.querySelector('.question-other-wrap');
@@ -10181,7 +10241,8 @@
                     var qText = tc.args.question ? String(tc.args.question) : '';
                     var qOpts = Array.isArray(tc.args.options) ? tc.args.options.map(function(s) { return String(s); }) : [];
                     activeQuestionCard = createQuestionCard(qText, qOpts);
-                    body.appendChild(activeQuestionCard);
+                    // 问题卡固定显示在聊天区最底部（执行过程分组之上），便于用户作答
+                    chatArea.appendChild(activeQuestionCard);
                     return;
                 }
                 var skillBox = document.createElement('div');
@@ -10195,13 +10256,15 @@
             // 推理属于过程，始终进分组（无工具调用时也建组，便于统一折叠）
             ensureProcessGroup();
             var rb = document.createElement('div');
-            rb.className = 'reasoning-box';
+            rb.className = 'reasoning-box collapsed';
             rb.innerHTML = '<div class="reasoning-box-header" onclick="this.parentElement.classList.toggle(\'collapsed\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg><span>Reasoning</span></div><div class="reasoning-content">' + escapeHtml(reasoning) + '</div>';
             getTodoAppendTarget().appendChild(rb);
         }
 
         if (!content || !content.trim()) {
-            if (hasToolCalls) { scrollToBottom(); return; }
+            // 无正文：有工具调用时只渲染过程元素；连工具调用也没有就无需
+            // 渲染空气泡（空气泡会走"最终总结"分支，把过程分组提前收起）
+            return;
         }
 
         var wrapper = document.createElement('div');
@@ -10218,9 +10281,8 @@
         wrapper.appendChild(bubble);
 
         if (hasToolCalls) {
-            // 带工具调用的中间发言属于过程，一并收进分组
+            // 带工具调用的中间发言属于过程，一并收进分组；不自动滚动
             (activeProcessBody || chatArea).appendChild(wrapper);
-            scrollToBottom();
             return;
         }
 
@@ -10240,7 +10302,7 @@
             var rb = w.previousElementSibling;
             if (!rb || !rb.classList.contains('reasoning-box')) {
                 rb = document.createElement('div');
-                rb.className = 'reasoning-box';
+                rb.className = 'reasoning-box collapsed';
                 rb.innerHTML = '<div class="reasoning-box-header" onclick="this.parentElement.classList.toggle(\'collapsed\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg><span>Reasoning</span></div><div class="reasoning-content streaming"></div>';
                 w.parentNode.insertBefore(rb, w);
             }
@@ -11358,7 +11420,6 @@
         div.className = 'workflow-goal-round';
         div.innerHTML = (wfDef('goal').icon || '') + '<span>' + escapeHtml(wfFormat('wfGoalRound', { n: round + 1 })) + '</span>';
         chatArea.appendChild(div);
-        scrollToBottom();
     }
 
     // ── 主进程工作流设置的读取 / 保存 ──
@@ -11585,7 +11646,6 @@
             var reasonText = reason ? escapeHtml(reason) : '\u6682\u505c\u8f93\u51fa\u4e2d';
             wrapper.innerHTML = '<div class="pause-indicator"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><span class="pause-reason">' + reasonText + '</span><span class="pause-countdown">' + seconds + 's</span></div>';
             getTodoAppendTarget().appendChild(wrapper);
-            scrollToBottom();
             var remaining = seconds;
             var countdownEl = wrapper.querySelector('.pause-countdown');
             var timer = setInterval(function() {
@@ -11916,12 +11976,32 @@
             // 复用 appendAIMessage 已渲染的交互卡片；若不存在则新建一个
             if (!activeQuestionCard) {
                 activeQuestionCard = createQuestionCard(questionText, optionList);
-                (ensureProcessGroup() || chatArea).appendChild(activeQuestionCard);
-                scrollToBottom();
             }
+            // 问题卡固定展示在聊天区最底部（不在"思考与执行过程"分组里），等待用户回复
+            chatArea.appendChild(activeQuestionCard);
+            scrollToBottom();
 
             return new Promise(function(resolve) {
+                var settled = false;
+                // 5 分钟内用户未处理：按"用户未回复"放行，告诉 AI 自行继续，
+                // 不让回合永远阻塞在等待上
+                var timeoutTimer = setTimeout(function() {
+                    if (settled) return;
+                    settled = true;
+                    activeQuestionResolver = null;
+                    // 只定格卡片状态；引用保留，由 appendToolResult 统一把
+                    // 卡片归入当前过程分组（回合结束时随之折叠）
+                    if (activeQuestionCard && activeQuestionCard._markTimeout) activeQuestionCard._markTimeout();
+                    resolve({
+                        success: true,
+                        timedOut: true,
+                        answer: '用户在 5 分钟内没有回复这次提问（超时）。请不要继续等待用户回答，自行选择最合理的方案继续完成任务。'
+                    });
+                }, QUESTION_TIMEOUT_MS);
                 activeQuestionResolver = function(answerObj) {
+                    if (settled) return;
+                    settled = true;
+                    if (timeoutTimer) clearTimeout(timeoutTimer);
                     activeQuestionResolver = null;
                     resolve(answerObj);
                 };
@@ -11960,7 +12040,8 @@
         var rb = body.querySelector(':scope > .reasoning-box.is-streaming');
         if (!rb) {
             rb = document.createElement('div');
-            rb.className = 'reasoning-box is-streaming';
+            // 默认折叠：只显示"Reasoning"标题，点击可展开看流式内容
+            rb.className = 'reasoning-box is-streaming collapsed';
             rb.innerHTML = '<div class="reasoning-box-header" onclick="this.parentElement.classList.toggle(\'collapsed\')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg><span>Reasoning</span></div><div class="reasoning-content streaming"></div>';
             body.appendChild(rb);
         }
@@ -12330,6 +12411,8 @@
             sidebarTodoStreamingConvId = conv.id;
             isLoading = true;
             generationAbortRequested = false;
+            // 新回合开始：重置"已有输出"标记，本回合第一次请求才会显示"思考中"
+            turnHasStreamOutput = false;
             setGeneratingConv(conv.id);
             if (isViewingGeneratingConv()) showTypingIndicator();
         }
@@ -12393,10 +12476,9 @@
             streamingWrapper.id = 'streaming-' + Date.now();
             var streamingBubble = document.createElement('div');
             streamingBubble.className = 'message-bubble';
-            streamingBubble.innerHTML = '<span style="opacity:0.5">Thinking...</span>';
+            // 占位文案由 startStreamAttempt 按回合状态决定，这里先留空
             streamingWrapper.appendChild(streamingBubble);
             chatArea.appendChild(streamingWrapper);
-            scrollToBottom();
 
             var lastContent = '';
             var lastReasoning = '';
@@ -12478,7 +12560,6 @@
             function showRetryCountdown(secondsLeft) {
                 var prefix = (lastStreamError && lastStreamError.message) ? escapeHtml(lastStreamError.message) + ' — ' : '';
                 streamingBubble.innerHTML = '<span style="opacity:0.65">⚠️ ' + prefix + escapeHtml(t('streamRetrying').replace('{s}', secondsLeft).replace('{n}', retryAttempt).replace('{max}', MAX_STREAM_RETRIES)) + '</span><div class="message-time">' + formatTime(new Date()) + '</div>';
-                scrollToBottom();
             }
 
             function scheduleStreamRetry(err) {
@@ -12509,7 +12590,15 @@
             }
 
             function startStreamAttempt() {
-                streamingBubble.innerHTML = '<span style="opacity:0.5">' + t('thinking') + '</span>';
+                // "思考中"只在回合还没有任何输出时显示一次；工具调用后的后续
+                // 流式请求不再重复出现"思考中"占位，避免一个回合里冒出好几个
+                if (turnHasStreamOutput) {
+                    streamingBubble.innerHTML = lastContent
+                        ? (formatMarkdown(lastContent) + '<div class="message-time">' + formatTime(new Date()) + '</div>')
+                        : '';
+                } else {
+                    streamingBubble.innerHTML = '<span style="opacity:0.5">' + t('thinking') + '</span>';
+                }
                 doApiCall(apiMessages, handleStreamResult);
             }
 
@@ -12528,14 +12617,15 @@
                     if (result.fullContent !== lastContent) {
                         lastContent = result.fullContent;
                         if (visibleNow) {
+                            // 有新输出时不自动滚动，保持用户当前阅读位置
                             streamingBubble.innerHTML = formatMarkdown(lastContent) + '<div class="message-time">' + formatTime(new Date()) + '</div>';
-                            scrollToBottom();
                         }
                     }
                     if (result.fullReasoning !== lastReasoning) {
                         lastReasoning = result.fullReasoning;
                         if (visibleNow) updateStreamingReasoning(streamingWrapper, lastReasoning);
                     }
+                    if (lastContent || lastReasoning) turnHasStreamOutput = true;
                     phonePushStream(lastContent, lastReasoning);
                 } else if (result.type === 'error') {
                     if (result.error && result.error.name === 'AbortError') {
@@ -12550,6 +12640,7 @@
                     }
                 } else if (result.type === 'tool_calls') {
                     streamingWrapper.remove();
+                    turnHasStreamOutput = true;
                     var toolTypingEl = document.getElementById('typingIndicator');
                     if (toolTypingEl) toolTypingEl.remove();
                     // 推理框已在分组内定稿，去掉流式光标标记
@@ -12592,7 +12683,6 @@
                         genWrapper.id = 'gen-' + Date.now();
                         genWrapper.innerHTML = '<div class="generating-indicator"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><span>' + t('executing') + '</span><div class="dot-bounce"><span></span><span></span><span></span></div></div>';
                         getTodoAppendTarget().appendChild(genWrapper);
-                        scrollToBottom();
                     }
 
                     var promises = result.toolCalls.map(function(tc) {
@@ -12725,7 +12815,15 @@
     function appendToolResult(toolName, result) {
         // ask_user 的回答已在问题卡片中展示，无需重复渲染 skill-box
         if (toolName === 'ask_user') {
-            if (activeQuestionCard) activeQuestionCard = null;
+            if (activeQuestionCard) {
+                // 回答/超时/取消后卡片一律归入当前过程分组：执行期间仍可见，
+                // 回合结束随分组一起折叠；否则一个回合提问多次时，先前的
+                // 卡片会永远散落在聊天区里
+                if (activeProcessBody) {
+                    activeProcessBody.appendChild(activeQuestionCard);
+                }
+                activeQuestionCard = null;
+            }
             return;
         }
         if (!result) return;
@@ -12745,7 +12843,6 @@
         }
         wrapper.innerHTML = '<div class="skill-box-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg><span>Tool: ' + escapeHtml(toolName) + '</span></div><div class="skill-args">' + escapeHtml(resultStr) + '</div>' + extraHtml;
         getTodoAppendTarget().appendChild(wrapper);
-        scrollToBottom();
     }
 
     function setupEvents() {
@@ -13518,7 +13615,6 @@
         chatArea.appendChild(wrapper);
         remoteStreamWrapper = wrapper;
         if (stream.reasoning) updateStreamingReasoning(wrapper, stream.reasoning);
-        scrollToBottom();
     }
 
     function setupRemoteSync() {

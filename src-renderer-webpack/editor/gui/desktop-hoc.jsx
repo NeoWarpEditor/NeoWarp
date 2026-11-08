@@ -7138,6 +7138,10 @@ class SourceCodePanel extends React.Component {
       scriptCount: 0,
       status: null // {type: 'ok'|'error', msg}
     };
+    // 当前面板文本对应的目标 id（切换角色检测用）
+    this._displayedTargetId = null;
+    // 各目标未应用的编辑暂存（切换角色时保存，切回时恢复，避免丢失或误应用）
+    this._pendingTexts = new Map();
     this.gutterRef = React.createRef();
     this.handleTextChange = this.handleTextChange.bind(this);
     this.handleTextScroll = this.handleTextScroll.bind(this);
@@ -7145,26 +7149,40 @@ class SourceCodePanel extends React.Component {
     this.handleApply = this.handleApply.bind(this);
     this.handleCopy = this.handleCopy.bind(this);
     this.reloadFromTarget = this.reloadFromTarget.bind(this);
+    this.handleTargetSwitch = this.handleTargetSwitch.bind(this);
   }
   componentDidMount () {
     this.reloadFromTarget();
-    // 积木变化 / 目标切换 → 防抖同步；用户有未应用的编辑时不覆盖文本
+    // 防抖同步。触发源有三类：runtime 的 PROJECT_CHANGED / TARGETS_UPDATE
+    // （积木变化等），以及 VM 自身的 'targetsUpdate'——切换角色时
+    // vm.setEditingTarget 只会发后一个，前两个都不会触发。触发时再根据
+    // editingTarget 是否变化决定是跟随切换还是普通同步
     this._onSyncNeeded = () => {
       if (this._refreshTimer) clearTimeout(this._refreshTimer);
       this._refreshTimer = setTimeout(() => {
-        if (this.state.text === this.state.loadedText) this.reloadFromTarget();
+        const target = this.props.vm.editingTarget;
+        const editingId = target ? target.id : null;
+        if (editingId !== this._displayedTargetId) {
+          this.handleTargetSwitch();
+        } else if (this.state.text === this.state.loadedText) {
+          // 用户有未应用的编辑时不覆盖文本
+          this.reloadFromTarget();
+        }
       }, SOURCE_CODE_REFRESH_DELAY);
     };
     this.props.vm.runtime.on('PROJECT_CHANGED', this._onSyncNeeded);
     this.props.vm.runtime.on('TARGETS_UPDATE', this._onSyncNeeded);
+    this.props.vm.on('targetsUpdate', this._onSyncNeeded);
   }
   componentWillUnmount () {
     this.props.vm.runtime.removeListener('PROJECT_CHANGED', this._onSyncNeeded);
     this.props.vm.runtime.removeListener('TARGETS_UPDATE', this._onSyncNeeded);
+    this.props.vm.removeListener('targetsUpdate', this._onSyncNeeded);
     if (this._refreshTimer) clearTimeout(this._refreshTimer);
   }
   reloadFromTarget () {
     const target = this.props.vm.editingTarget;
+    this._displayedTargetId = target ? target.id : null;
     if (!target) {
       this.setState({ text: '', loadedText: '', targetName: '', scriptCount: 0, status: null });
       return;
@@ -7178,6 +7196,36 @@ class SourceCodePanel extends React.Component {
       scriptCount: scripts.length,
       status: null
     });
+  }
+  handleTargetSwitch () {
+    const prevId = this._displayedTargetId;
+    if (prevId) {
+      if (this.state.text !== this.state.loadedText) {
+        this._pendingTexts.set(prevId, {
+          text: this.state.text,
+          loadedText: this.state.loadedText,
+          scriptCount: this.state.scriptCount
+        });
+      } else {
+        this._pendingTexts.delete(prevId);
+      }
+    }
+    const target = this.props.vm.editingTarget;
+    const pending = target ? this._pendingTexts.get(target.id) : null;
+    if (pending) {
+      // 切回之前编辑过未应用的角色：恢复暂存的编辑
+      this._pendingTexts.delete(target.id);
+      this._displayedTargetId = target.id;
+      this.setState({
+        text: pending.text,
+        loadedText: pending.loadedText,
+        scriptCount: pending.scriptCount,
+        targetName: target.getName(),
+        status: null
+      });
+    } else {
+      this.reloadFromTarget();
+    }
   }
   handleTextChange (e) {
     this.setState({ text: e.target.value });
@@ -7327,6 +7375,8 @@ class SourceCodePanel extends React.Component {
 }
 SourceCodePanel.propTypes = {
   vm: PropTypes.shape({
+    on: PropTypes.func.isRequired,
+    removeListener: PropTypes.func.isRequired,
     runtime: PropTypes.shape({
       on: PropTypes.func.isRequired,
       removeListener: PropTypes.func.isRequired
