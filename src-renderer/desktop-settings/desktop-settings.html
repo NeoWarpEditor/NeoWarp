@@ -998,6 +998,25 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      /* 按请求地址分组的可折叠分组：批量添加的模型收进同一地址组 */
+      .ai-ep-head {
+        cursor: pointer;
+        user-select: none;
+      }
+      .ai-ep-chevron {
+        width: 12px;
+        height: 12px;
+        align-self: center;
+        flex-shrink: 0;
+        transition: transform 0.2s;
+      }
+      .ai-ep-count {
+        margin-left: 7px;
+        font-weight: 400;
+        color: var(--text-tertiary);
+      }
+      .ai-ep-group.collapsed .ai-ep-chevron { transform: rotate(-90deg); }
+      .ai-ep-group.collapsed .ai-ep-body { display: none; }
       .ai-free-tag {
         font-size: 11px;
         font-weight: 600;
@@ -2827,7 +2846,7 @@
           fieldEndpoint: '接口地址',
           endpointAutoHint: '填 base URL 或完整端点均可，会自动补全 /chat/completions',
           fieldModelId: '模型 ID',
-          fieldModelIdHint: '每行填写一个模型 ID，也可用逗号分隔；保存后会生成多条模型配置',
+          fieldModelIdHint: '每行填写一个模型 ID，也可用逗号分隔；同一接口地址的模型会归为一组展示',
           fieldContextLimit: '上下文上限（tokens）',
           fieldContextLimitHint: '用于在对话超长前裁剪历史',
           fieldApiKey: 'API Key',
@@ -2861,6 +2880,7 @@
           unnamed: '未命名',
           freeModelsTitle: '免费模型',
           myModelsTitle: '我的模型',
+          epGroupModels: '{n} 个模型',
           freeBadge: '免费',
           freeEnded: '免费使用活动已结束',
           freeGroupNote: 'NeoWarp 免费提供，无需 API Key，点击即可切换 · 活动截止 2026年11月30日 12:00'
@@ -2892,7 +2912,7 @@
           fieldEndpoint: 'Endpoint',
           endpointAutoHint: 'Accepts a base URL or a full endpoint URL — /chat/completions is appended automatically',
           fieldModelId: 'Model IDs',
-          fieldModelIdHint: 'Enter one model ID per line or separate IDs with commas; each is saved as a separate config',
+          fieldModelIdHint: 'Enter one model ID per line or separate IDs with commas; models on the same endpoint are grouped together in the list',
           fieldContextLimit: 'Context limit (tokens)',
           fieldContextLimitHint: 'Used to trim conversation history before it gets too long',
           fieldApiKey: 'API Key',
@@ -2926,6 +2946,7 @@
           unnamed: 'Unnamed',
           freeModelsTitle: 'Free models',
           myModelsTitle: 'My models',
+          epGroupModels: '{n} models',
           freeBadge: 'Free',
           freeEnded: 'Free offer has ended',
           freeGroupNote: 'Provided free by NeoWarp — no API key needed, click to switch · ends Nov 30, 2026, 12:00 (UTC+8)'
@@ -3297,7 +3318,61 @@
         if (ownRows.length) {
           list.appendChild(aiGroupHead(aiS.myModelsTitle, ''));
         }
-        ownRows.forEach((cfg) => list.appendChild(aiModelRow(cfg)));
+
+        // 按请求地址分类：自定义配置按规范化端点，内置服务商按服务商。
+        // 批量添加（同一地址多个模型 ID）的配置收进同一可折叠组，
+        // 不再平铺成一堆；单条配置的组不渲染组头，保持原有平铺样式。
+        const epKeyOf = (cfg) => {
+          const p = AI_PROVIDERS[cfg.provider] || {};
+          return (p.isCustom || cfg.customEndpoint)
+            ? 'ep:' + normalizeCustomEndpoint(cfg.customEndpoint || '')
+            : 'pr:' + cfg.provider;
+        };
+        const epGroups = [];
+        const epIndex = {};
+        ownRows.forEach((cfg) => {
+          const key = epKeyOf(cfg);
+          if (epIndex[key] === undefined) {
+            epIndex[key] = epGroups.length;
+            epGroups.push({idxs: []});
+          }
+          epGroups[epIndex[key]].idxs.push(cfg);
+        });
+        epGroups.forEach((g) => {
+          if (g.idxs.length === 1) {
+            list.appendChild(aiModelRow(g.idxs[0]));
+            return;
+          }
+          const first = g.idxs[0];
+          const p = AI_PROVIDERS[first.provider] || {};
+          const address = (p.isCustom || first.customEndpoint)
+            ? normalizeCustomEndpoint(first.customEndpoint || '')
+            : (p.endpoint || '');
+          let title = '';
+          for (const c of g.idxs) {
+            if (c.name) { title = c.name; break; }
+          }
+          if (!title) {
+            title = address.replace(/^https?:\/\//i, '').split('/')[0] || aiProviderName(first.provider) || aiS.unnamed;
+          }
+          const wrap = document.createElement('div');
+          wrap.className = 'ai-ep-group';
+          const head = document.createElement('div');
+          head.className = 'ai-group-head ai-ep-head';
+          head.title = address;
+          head.innerHTML =
+            '<svg class="ai-ep-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+            '<span class="ai-group-title">' + aiEscape(title) +
+            '<span class="ai-ep-count">' + aiEscape(aiS.epGroupModels.replace('{n}', String(g.idxs.length))) + '</span></span>' +
+            '<span class="ai-group-note">' + aiEscape(address) + '</span>';
+          const body = document.createElement('div');
+          body.className = 'ai-ep-body';
+          g.idxs.forEach((cfg) => body.appendChild(aiModelRow(cfg)));
+          head.addEventListener('click', () => wrap.classList.toggle('collapsed'));
+          wrap.appendChild(head);
+          wrap.appendChild(body);
+          list.appendChild(wrap);
+        });
 
         const addBtn = document.createElement('button');
         addBtn.type = 'button';

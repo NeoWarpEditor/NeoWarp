@@ -3436,6 +3436,39 @@
             text-transform: none;
             color: var(--text-tertiary);
         }
+        /* ── 按请求地址分组的可折叠分组（批量添加的模型不再平铺成一堆）── */
+        .model-ep-group {
+            grid-column: 1 / -1;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(330px, 1fr));
+            gap: 10px;
+            align-items: stretch;
+        }
+        .model-ep-head {
+            cursor: pointer;
+            user-select: none;
+            min-width: 0;
+        }
+        .model-ep-chevron {
+            width: 12px;
+            height: 12px;
+            align-self: center;
+            flex-shrink: 0;
+            transition: transform var(--transition);
+        }
+        .model-ep-count {
+            margin-left: 7px;
+            font-weight: 600;
+            color: var(--text-tertiary);
+        }
+        .model-ep-address {
+            min-width: 0;
+            flex: 1 1 auto;
+            text-align: right;
+        }
+        .model-ep-group.collapsed .model-ep-chevron { transform: rotate(-90deg); }
+        .model-ep-group.collapsed .model-ep-body { display: none; }
+        .model-ep-body { display: contents; }
         .settings-empty {
             display: flex;
             flex-direction: column;
@@ -5452,11 +5485,6 @@
 
                     <div class="settings-pane" id="settingsPaneWorkflow" role="tabpanel">
                         <div class="wf-setting-section">
-                            <div class="wf-setting-label" id="wfDefaultLabel">默认工作流</div>
-                            <div class="wf-setting-desc" id="wfDefaultDesc">发送消息时默认使用的工作流。你也可以随时在输入框开头输入 / 临时切换；选择「不使用」则按普通对话执行。</div>
-                            <div class="wf-options" id="wfDefaultOptions"></div>
-                        </div>
-                        <div class="wf-setting-section">
                             <div class="wf-setting-label" id="wfDocsLabel">工作流文档保存位置</div>
                             <div class="wf-setting-desc" id="wfDocsDesc">Plan / Spec 工作流生成的文档会按任务名分文件夹保存到该目录，可纳入版本控制长期保留。留空则仅保留在当前会话中。</div>
                             <div class="wf-dir-row">
@@ -6523,6 +6551,7 @@
             undoBusy: 'Wait for the current reply to finish first',
             undoRemoteOnly: 'Undo runs on the computer',
             myModelsTitle: 'My models',
+            epGroupModels: '{n} models',
             dockAttach: 'Add attachment',
             dockAttachFile: 'Add file',
             dockAttachImage: 'Add image',
@@ -6778,6 +6807,7 @@
             undoBusy: '请先等当前回答结束',
             undoRemoteOnly: '撤销操作在电脑端执行',
             myModelsTitle: '我的模型',
+            epGroupModels: '{n} 个模型',
             dockAttach: '添加附件',
             dockAttachFile: '添加文件',
             dockAttachImage: '添加图片',
@@ -6975,10 +7005,6 @@
         var tabWorkflowEl = document.getElementById('settingsTabWorkflow');
         if (tabWorkflowEl) tabWorkflowEl.title = t('tabWorkflow');
         // 工作流设置页与设置面板标签跟随语言刷新
-        var wfDefaultLabelEl = document.getElementById('wfDefaultLabel');
-        if (wfDefaultLabelEl) wfDefaultLabelEl.textContent = t('wfSettingsDefaultLabel');
-        var wfDefaultDescEl = document.getElementById('wfDefaultDesc');
-        if (wfDefaultDescEl) wfDefaultDescEl.textContent = t('wfSettingsDefaultDesc');
         var wfDocsLabelEl = document.getElementById('wfDocsLabel');
         if (wfDocsLabelEl) wfDocsLabelEl.textContent = t('wfSettingsDocsLabel');
         var wfDocsDescEl = document.getElementById('wfDocsDesc');
@@ -9057,9 +9083,70 @@
         if (ownIdx.length) {
             list.appendChild(groupHead(t('myModelsTitle'), ''));
         }
+
+        // 按请求地址分类：自定义配置按规范化端点，内置服务商按服务商。
+        // 批量添加（同一地址多个模型 ID）的配置收进同一组，可折叠，
+        // 不再平铺成一堆；单条配置的组不渲染组头，保持原有平铺样式。
+        function groupKeyOf(cfg) {
+            var p = PROVIDERS[cfg.provider] || {};
+            if (p.isCustom || cfg.customEndpoint) {
+                return 'ep:' + normalizeCustomEndpoint(cfg.customEndpoint || '');
+            }
+            return 'pr:' + cfg.provider;
+        }
+        var epGroups = [];
+        var epIndex = {};
         ownIdx.forEach(function(idx) {
-            list.appendChild(buildModelConfigCard(idx));
+            var key = groupKeyOf(savedConfigs[idx]);
+            if (epIndex[key] === undefined) {
+                epIndex[key] = epGroups.length;
+                epGroups.push({ idxs: [] });
+            }
+            epGroups[epIndex[key]].idxs.push(idx);
         });
+
+        epGroups.forEach(function(g) {
+            if (g.idxs.length === 1) {
+                list.appendChild(buildModelConfigCard(g.idxs[0]));
+                return;
+            }
+            var first = savedConfigs[g.idxs[0]];
+            var p = PROVIDERS[first.provider] || {};
+            var address = (p.isCustom || first.customEndpoint)
+                ? normalizeCustomEndpoint(first.customEndpoint || '')
+                : (p.endpoint || '');
+            var title = '';
+            for (var i = 0; i < g.idxs.length; i++) {
+                if (savedConfigs[g.idxs[i]].name) { title = savedConfigs[g.idxs[i]].name; break; }
+            }
+            if (!title) title = hostOf(address) || providerDisplayName(first.provider) || 'Model';
+
+            var wrap = document.createElement('div');
+            wrap.className = 'model-ep-group';
+            var head = document.createElement('div');
+            head.className = 'model-group-head model-ep-head';
+            head.title = address;
+            head.innerHTML =
+                '<svg class="model-ep-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>' +
+                '<span class="model-group-title">' + escapeHtml(title) +
+                '<span class="model-ep-count">' + escapeHtml(tf('epGroupModels', { n: g.idxs.length })) + '</span></span>' +
+                '<span class="model-group-note model-ep-address">' + escapeHtml(address) + '</span>';
+            var body = document.createElement('div');
+            body.className = 'model-ep-body';
+            g.idxs.forEach(function(idx) {
+                body.appendChild(buildModelConfigCard(idx));
+            });
+            head.addEventListener('click', function() {
+                wrap.classList.toggle('collapsed');
+            });
+            wrap.appendChild(head);
+            wrap.appendChild(body);
+            list.appendChild(wrap);
+        });
+
+        function hostOf(url) {
+            return String(url || '').replace(/^https?:\/\//i, '').split('/')[0];
+        }
     }
 
     function buildModelConfigCard(idx) {
@@ -11060,7 +11147,7 @@
             wf.status = 'cancelled';
             saveCurrentConversation();
             renderWorkflowCardForConv(conv);
-            setPendingWorkflow(workflowSettings.workflow);
+            setPendingWorkflow('none');
             showToast(t('wfToastCancelled'), 'success');
         });
     }
@@ -11329,7 +11416,7 @@
                 if (finalContent.indexOf('[PLAN_COMPLETE]') >= 0) {
                     wf.status = 'completed';
                     changed = true;
-                    setPendingWorkflow(workflowSettings.workflow);
+                    setPendingWorkflow('none');
                 }
             }
         } else if (wf.mode === 'spec') {
@@ -11369,7 +11456,7 @@
                 if (finalContent.indexOf('[SPEC_COMPLETE]') >= 0) {
                     wf.status = 'completed';
                     changed = true;
-                    setPendingWorkflow(workflowSettings.workflow);
+                    setPendingWorkflow('none');
                 }
             }
         } else if (wf.mode === 'goal') {
@@ -11378,7 +11465,7 @@
                 changed = true;
                 if (/\[GOAL_STATUS:achieved\]/.test(finalContent)) {
                     wf.status = 'completed';
-                    setPendingWorkflow(workflowSettings.workflow);
+                    setPendingWorkflow('none');
                 }
             }
         }
@@ -11423,65 +11510,25 @@
     }
 
     // ── 主进程工作流设置的读取 / 保存 ──
+    // 工作流模式不再有"默认值"：只能通过对话输入 / 启用，这里只同步文档目录。
     function loadWorkflowSettings() {
         if (!window.AIAssistantPreload || !AIAssistantPreload.getWorkflowSettings) return;
         AIAssistantPreload.getWorkflowSettings().then(function(s) {
             if (!s) return;
-            workflowSettings.workflow = (s.workflow === 'plan' || s.workflow === 'spec' || s.workflow === 'goal') ? s.workflow : 'none';
             workflowSettings.docsDir = typeof s.docsDir === 'string' ? s.docsDir : '';
-            setPendingWorkflow(workflowSettings.workflow);
             renderWorkflowSettingsPane();
         }).catch(function() {});
         if (AIAssistantPreload.onWorkflowSettingsChanged) {
             AIAssistantPreload.onWorkflowSettingsChanged(function(s) {
                 if (!s) return;
-                workflowSettings.workflow = (s.workflow === 'plan' || s.workflow === 'spec' || s.workflow === 'goal') ? s.workflow : 'none';
                 workflowSettings.docsDir = typeof s.docsDir === 'string' ? s.docsDir : '';
-                // 只更新默认值，不覆盖用户当前明确的徽章选择
                 renderWorkflowSettingsPane();
             });
         }
     }
 
-    function saveWorkflowSettings(partial) {
-        if (!window.AIAssistantPreload || !AIAssistantPreload.saveWorkflowSettings) return;
-        AIAssistantPreload.saveWorkflowSettings(partial).then(function(s) {
-            if (!s) return;
-            workflowSettings.workflow = (s.workflow === 'plan' || s.workflow === 'spec' || s.workflow === 'goal') ? s.workflow : 'none';
-            workflowSettings.docsDir = typeof s.docsDir === 'string' ? s.docsDir : '';
-            renderWorkflowSettingsPane();
-        }).catch(function() {});
-    }
-
-    // ── AI 设置页：工作流 pane ──
+    // ── AI 设置页：工作流 pane（仅文档目录；工作流模式只能在对话中输入 / 启用） ──
     function renderWorkflowSettingsPane() {
-        var wrap = document.getElementById('wfDefaultOptions');
-        if (!wrap) return;
-        wrap.innerHTML = '';
-        var modes = [
-            { mode: 'none', name: t('wfNoneName'), zh: t('wfNoneMode'), desc: t('wfNoneDesc') },
-            { mode: 'plan', name: t('wfPlanName'), zh: t('wfPlanMode'), desc: t('wfPlanDesc') },
-            { mode: 'spec', name: t('wfSpecName'), zh: t('wfSpecMode'), desc: t('wfSpecDesc') },
-            { mode: 'goal', name: t('wfGoalName'), zh: t('wfGoalMode'), desc: t('wfGoalDesc') }
-        ];
-        modes.forEach(function(m) {
-            var def = wfDef(m.mode);
-            var el = document.createElement('button');
-            el.type = 'button';
-            el.className = 'wf-option' + (workflowSettings.workflow === m.mode ? ' selected' : '');
-            el.innerHTML =
-                '<span class="wf-option-icon" style="background:' + def.color + ';">' + (def.icon || '') + '</span>' +
-                '<span class="wf-option-texts">' +
-                    '<span class="wf-option-name">' + escapeHtml(m.name) + ' <span class="wf-zh">' + escapeHtml(m.zh) + '</span></span>' +
-                    '<span class="wf-option-desc">' + escapeHtml(m.desc) + '</span>' +
-                '</span>';
-            el.addEventListener('click', function() {
-                saveWorkflowSettings({ workflow: m.mode });
-                setPendingWorkflow(m.mode);
-                showToast(t('wfSettingsSaved'), 'success');
-            });
-            wrap.appendChild(el);
-        });
         var pathEl = document.getElementById('wfDocsDirPath');
         if (pathEl) {
             if (workflowSettings.docsDir) {
