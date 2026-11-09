@@ -1,0 +1,173 @@
+name: Build Installers
+
+# 一键打包 Windows / macOS / Linux 安装包，无需任何签名证书。
+# 触发方式：
+#   1. 推送 [数字开头] 的 tag（例如 2.3.0）
+#   2. 在 Actions 页面手动点击运行，并填写 tag
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布到的 tag（例如 2.3.0）'
+        required: true
+        default: '2.3.0'
+  push:
+    tags:
+      - '[0-9]*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Windows
+    runs-on: windows-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: repo
+      - name: Move repository to D: drive
+        run: |
+          Copy-Item -Path repo -Destination D:\repo -Recurse
+          Remove-Item -Path repo -Recurse -Force
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Configure npm to use D: drive
+        run: |
+          npm config set cache D:\npm-cache
+          npm config set prefix D:\npm-prefix
+      - name: Install dependencies
+        working-directory: D:\repo
+        run: npm ci --loglevel=info
+      - name: Fetch
+        working-directory: D:\repo
+        run: npm run fetch
+      - name: Compile
+        working-directory: D:\repo
+        run: npm run webpack:prod
+      - name: Package
+        working-directory: D:\repo
+        run: node release-automation/build.mjs --windows --windows-portable --x64 --arm64
+      - name: Print file tree
+        working-directory: D:\repo
+        run: node scripts/print-file-tree.mjs dist
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          if-no-files-found: error
+          path: |
+            D:\repo\dist\*.exe
+
+  build-mac:
+    name: macOS
+    runs-on: macos-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm ci --loglevel=info
+      - name: Fetch
+        run: npm run fetch
+      - name: Compile
+        run: npm run webpack:prod
+      - name: Package
+        run: node release-automation/build.mjs --mac --universal
+        env:
+          # 没有 Apple 开发者证书，直接跳过签名（生成的 dmg 未签名）
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Print file tree
+        run: node scripts/print-file-tree.mjs dist
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac
+          if-no-files-found: error
+          path: dist/*.dmg
+
+  build-linux:
+    name: Linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install strip-nondeterminism
+        run: sudo apt-get install -y strip-nondeterminism
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Install dependencies
+        run: npm ci --loglevel=info
+      - name: Fetch
+        run: npm run fetch
+      - name: Compile
+        run: npm run webpack:prod
+      - name: Package
+        run: node release-automation/build.mjs --debian --tarball --appimage --x64 --arm64
+      - name: Print file tree
+        run: node scripts/print-file-tree.mjs dist
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          if-no-files-found: error
+          path: |
+            dist/*.deb
+            dist/*.tar.gz
+            dist/*.AppImage
+
+  publish:
+    name: Publish release
+    needs:
+      - build-windows
+      - build-mac
+      - build-linux
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+        continue-on-error: true
+      - name: Show files
+        run: ls -lhR artifacts || true
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          name: NeoWarp v${{ inputs.tag || github.ref_name }}
+          body: |
+            ## NeoWarp ${{ inputs.tag || github.ref_name }}
+
+            | 系统 | 文件 | 说明 |
+            | --- | --- | --- |
+            | Windows | `NeoWarp-Setup-...-x64.exe` | 安装版（推荐） |
+            | Windows | `NeoWarp Portable ....exe` | 免安装绿色版 |
+            | Windows | `...-arm64.exe` | 给 ARM 电脑用 |
+            | macOS | `NeoWarp-Setup-....dmg` | 通用版，Intel 和苹果芯片都能用 |
+            | Linux | `....AppImage` | 免安装，双击就能用（推荐） |
+            | Linux | `....deb` | 给 Ubuntu / Debian 用 |
+            | Linux | `....tar.gz` | 压缩包版 |
+
+            > 这些安装包没有购买苹果/微软的签名证书，第一次打开时系统可能会提示"未知开发者"。
+            > Windows：点"更多信息 → 仍要运行"；macOS：右键点图标 → 打开。
+          files: artifacts/**/*
+          fail_on_unmatched_files: false
