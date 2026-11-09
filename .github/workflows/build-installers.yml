@@ -29,7 +29,7 @@ jobs:
         with:
           persist-credentials: false
           path: repo
-      - name: Move repository to D: drive
+      - name: Move repository to D drive
         run: |
           Copy-Item -Path repo -Destination D:\repo -Recurse
           Remove-Item -Path repo -Recurse -Force
@@ -37,7 +37,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 24
-      - name: Configure npm to use D: drive
+      - name: Configure npm to use D drive
         run: |
           npm config set cache D:\npm-cache
           npm config set prefix D:\npm-prefix
