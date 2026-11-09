@@ -1,7 +1,7 @@
 {
   "name": "neowarp",
   "description": "NeoWarp - Scratch mod with a compiler, dark mode, a bunch of addons, and more.",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "license": "GPL-3.0",
   "author": {
     "email": "contact@neowarp.org",
